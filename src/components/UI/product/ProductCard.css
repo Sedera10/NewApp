@@ -1,0 +1,117 @@
+.product-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.2s ease;
+}
+
+.product-card:hover {
+  transform: translateY(-5px);
+}
+
+.image-container {
+  background-color: var(--color-secondary);
+  position: relative;
+  padding: 20px;
+  border-radius: 8px;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Badges */
+.badges {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.badge {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  color: var(--color-white);
+  text-transform: uppercase;
+}
+
+.badge-new {
+  background-color: var(--color-accent-new);
+}
+
+.badge-discount {
+  background-color: var(--color-accent-discount);
+  color: var(--color-text-dark); /* Plus lisible sur le jaune */
+}
+
+/* Favoris */
+.favorite-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: var(--color-white);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s;
+}
+
+.favorite-btn:hover {
+  color: var(--color-accent-new);
+}
+
+.favorite-btn.active {
+  color: var(--color-accent-new);
+}
+
+/* Infos produit */
+.product-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0 5px;
+}
+
+.product-name {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-text-dark);
+}
+
+.price-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.product-price {
+  background-color: var(--color-price);
+  color: var(--color-white);
+  padding: 4px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 4px;
+}
+
+.old-price {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+  margin-top: 4px;
+}

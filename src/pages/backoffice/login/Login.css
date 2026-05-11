@@ -1,0 +1,62 @@
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Bandeau avec image (Capture d'écran 2026-05-04 084557.jpg) */
+.login-header-bg {
+  background-image: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), 
+                    url('/LoginCover.avif');
+  background-size: cover;
+  background-position: center;
+  height: 45vh; /* Prend presque la moitié de la hauteur */
+  width: calc(100% - 2rem);
+  margin: 1rem auto;
+  border-radius: var(--border-radius);
+}
+
+/* La carte qui remonte sur l'image */
+.login-card {
+  margin-top: -150px; /* Valeur négative pour l'effet de chevauchement */
+  position: relative;
+  z-index: 50;
+  overflow: visible;
+  border: none !important;
+  background-color: #ffffff;
+}
+
+.login-nav .nav-links a {
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.login-nav .nav-links a:hover {
+  opacity: 0.7;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Adaptation pour mobile */
+@media (max-width: 768px) {
+  .login-card {
+    margin-top: -80px;
+    margin-left: 10px;
+    margin-right: 10px;
+  }
+  
+  .login-header-bg {
+    height: 35vh;
+  }
+}
+
+/* Utilisation des variables pour le bouton du header */
+.btn-info {
+  background: var(--info-gradient);
+  border: none;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
