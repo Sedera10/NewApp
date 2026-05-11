@@ -101,16 +101,59 @@
 .user-actions {
   display: flex;
   gap: 20px;
+  align-items: center;
 }
 
 .action-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   color: var(--color-text-dark);
   font-size: 12px;
   position: relative;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.icon-wrapper {
+  padding: 8px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-btn:hover .icon-wrapper {
+  background-color: var(--color-secondary);
+}
+
+.logged-in-user {
+  cursor: default;
+}
+.logged-in-user:hover .icon-wrapper {
+  background-color: transparent; /* Pas de hover sur l'info du user si c'est juste du texte */
+}
+
+/* Logout Button au fond */
+.logout-btn {
+  background-color: var(--color-primary);
+  color: var(--color-white);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-left: 15px;
+}
+
+.logout-btn:hover {
+  background-color: #333;
 }
 
 .cart-count {

@@ -19,6 +19,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/mystore/fr" replace/>} />
         <Route path="/mystore/fr"element={<HomePage />} />
+        <Route path="/mystore/fr/login"element={<Login />} />
         {/* Backoffice */}
         <Route path="/mystore/admin" element={<Login />} />
         {/* Routes protégées */}

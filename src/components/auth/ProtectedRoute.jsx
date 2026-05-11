@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { isAuthenticatedAdmin } from '../../service/auth/Login';
+import { isAuthenticatedAdmin } from '../../service/authService';
 
 const ProtectedRoute = ({ children }) => {
   if (!isAuthenticatedAdmin()) {

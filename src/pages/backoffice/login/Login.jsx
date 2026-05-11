@@ -1,18 +1,23 @@
 import React, { useState, useEffect }  from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { MdFacebook } from 'react-icons/md';
 import { FaGithub, FaGoogle } from 'react-icons/fa';
-import { loginBO } from '../../../service/auth/Login';
+import { loginBO, loginFO } from '../../../service/authService';
+import { urlContains } from '../../../service/Util';
+import ConfirmDialog from '../../../components/UI/others/ConfirmDialog';
 import './Login.css';
 
 export default function Login() {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const clientForm = !urlContains(location.pathname, "/admin");
 
     const[error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
     
     const [formData, setFormData] = useState({
-      username: 'Sedera3343',
-      password: 'admin3343',
+      identifier: clientForm ? 'sederavalisoara@gmail.com' : 'Sedera3343',
+      password: clientForm ? 'sedera07#' : 'admin3343',
     });
 
     const handleChange = (e) => {
@@ -26,16 +31,29 @@ export default function Login() {
     const handleSubmit = async (e) => {
       e.preventDefault();
       setLoading(true);
+      setError(null);
       
-      const { username, password } = formData;
-      const ok = loginBO(username, password);
+      const { identifier, password } = formData;
       
-      if (ok) {
-        setLoading(false);
-        setError(null);
-        window.location.href = "/mystore/admin/import"; 
-      } else {
-        setError("Identifiants incorrects");
+      try {
+        if (clientForm) {
+          // Authentication Client (FO)
+          const session = await loginFO(identifier, password);
+          if (session) {
+            navigate("/mystore/fr"); 
+          }
+        } else {
+          // Authentication Admin (BO)
+          const ok = loginBO(identifier, password);
+          if (ok) {
+            window.location.href = "/mystore/admin/import"; 
+          } else {
+            setError("Identifiants incorrects");
+          }
+        }
+      } catch (err) {
+        setError(err.message || "Erreur lors de la connexion");
+      } finally {
         setLoading(false);
       }
     };
@@ -54,26 +72,55 @@ export default function Login() {
               
               {/* En-tête bleu de la carte */}
               <div className="mat-card-header-floating text-center">
-                <h4 className="text-white mb-4">Welcome back</h4>
+                <h4 className="text-white mb-4">
+                  {clientForm ? "Espace Client" : "Back-Office Admin"}
+                </h4>
                 <div className="social-icons d-flex justify-content-center gap-4 mb-2">
                   <MdFacebook size={24} className="cursor-pointer" />
                   <FaGithub size={20} className="cursor-pointer" />
                   <FaGoogle size={18} className="cursor-pointer" />
                 </div>
-                <p className="text-white-50 small mt-3">Enter your email and password to sign in</p>
+                <p className="text-white-50 small mt-3">
+                  {clientForm 
+                    ? "Saisissez votre email et mot de passe pour vous connecter" 
+                    : "Saisissez votre nom d'utilisateur (admin)"}
+                </p>
               </div>
 
-              {error && <div className="alert alert-danger text-white">{error}</div>}
-              {loading && <div className="text-center my-3"><span className="spinner-border spinner-border-sm"></span> Chargement des options...</div>}
+              {error && <ConfirmDialog
+                  isOpen={true}
+                  title='Authentification'
+                  message={error}
+                  cancelText=''
+                  confirmText='Fermer'
+                  onConfirm={() => { setError(null)}}
+                />}
+              {loading && <div className="text-center my-3"><span className="spinner-border spinner-border-sm"></span> Connexion en cours...</div>}
 
               {/* Corps du formulaire */}
               <div className="card-body p-4 mt-2">
                 <form onSubmit={handleSubmit} >
                   <div className="mb-4">
-                    <input type="text" name="username" value={formData.username} onChange={handleChange} className="mat-input" placeholder="Username" />
+                    <input 
+                      type={clientForm ? "email" : "text"} 
+                      name="identifier" 
+                      value={formData.identifier} 
+                      onChange={handleChange} 
+                      className="mat-input" 
+                      placeholder={clientForm ? "Email" : "Username"} 
+                      required 
+                    />
                   </div>
                   <div className="mb-4">
-                    <input type="password" name="password" value={formData.password} onChange={handleChange} className="mat-input" placeholder="Password" />
+                    <input 
+                      type="password" 
+                      name="password" 
+                      value={formData.password} 
+                      onChange={handleChange} 
+                      className="mat-input" 
+                      placeholder="Password" 
+                      required 
+                    />
                   </div>
 
                   <button type="submit" disabled={loading}  className="btn w-100 text-white fw-bold py-2 shadow-primary" 
@@ -84,7 +131,10 @@ export default function Login() {
 
                 <div className="text-center mt-4">
                   <p className="small text-secondary">
-                    Already have an account? <NavLink to="#" className="fw-bold text-primary">Sign In</NavLink>
+                    {clientForm ? "Pas encore de compte ?" : "Problème d'accès ?"} 
+                    <NavLink to="#" className="fw-bold text-primary ml-1">
+                      {clientForm ? "S'inscrire" : "Contacter le support"}
+                    </NavLink>
                   </p>
                 </div>
               </div>

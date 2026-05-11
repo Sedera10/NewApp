@@ -1,9 +1,24 @@
-import React from 'react';
+import React , { useState, useEffect} from 'react';
 import { Search, ShoppingCart, User, Menu, ChevronDown } from 'lucide-react';
 import './Header.css';
-import logoUrl from '/logo.png'; // Placeholder import to prevent missing variable error
+import logoUrl from '/logo.png';
+import { logoutFO } from '../../service/authService';
 
 const Header = () => {
+  const [customer, setCustomer] = useState(null);
+  const loadCustomer = () => {
+    const currentUser = JSON.parse(
+      localStorage.getItem('client_session')
+    );
+    if (currentUser?.isLoggedIn) {
+      setCustomer(currentUser);
+    }
+  }
+
+  useEffect(() => {
+    loadCustomer();
+  }, []);
+
   return (
     <header className="site-header">
       <div className="header-container">
@@ -41,15 +56,47 @@ const Header = () => {
 
         {/* Actions Utilisateur */}
         <div className="user-actions">
-          <button className="action-btn">
-            <User size={22} />
-            <span>Connexion</span>
-          </button>
+          { !customer ? (
+            <button className="action-btn" onClick={()=> {window.location.href = "/mystore/fr/login"}}>
+              <div className="icon-wrapper">
+                <User size={22} />
+              </div>
+              <span>Connectez-vous</span>
+            </button>
+          ) : (
+            <div className="action-btn logged-in-user">
+              <div className="icon-wrapper">
+                <User size={22} /> 
+              </div>
+              <span>{customer.firstname} {customer.lastname}</span>
+            </div>
+          )}
+          
           <button className="action-btn cart-btn">
-            <ShoppingCart size={22} />
+            <div className="icon-wrapper">
+              <ShoppingCart size={22} />
+            </div>
+            <span>Panier</span>
             <span className="cart-count">2</span>
           </button>
         </div>
+
+        {/* Bouton déconnexion à droite si connecté */}
+        {customer && (
+          <div className="logout-container">
+            <button 
+              type="button" 
+              className="logout-btn" 
+              onClick={() => {
+                logoutFO();
+                setCustomer(null);
+                window.location.href = "/mystore/fr";
+              }} 
+            >
+              Déconnexion
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );
