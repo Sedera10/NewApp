@@ -9,6 +9,7 @@ import HomePage from './pages/frontoffice/home/HomePage'
 import Login from './pages/backoffice/login/Login'
 import ImportPage from './pages/backoffice/import/ImportPage'
 import LogOut from './pages/backoffice/login/LogOut'
+import ResetDataPage from './pages/backoffice/reset/ResetDataPage' // Nouvelle page
 import ProtectedRoute from './components/auth/ProtectedRoute' // Import du composant de protection
 
 function App() {
@@ -36,6 +37,14 @@ function App() {
           element={
             <ProtectedRoute>
               <ImportPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/mystore/admin/reset" 
+          element={
+            <ProtectedRoute>
+              <ResetDataPage />
             </ProtectedRoute>
           } 
         />

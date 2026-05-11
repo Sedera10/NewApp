@@ -25,6 +25,7 @@ npm install express cors dotenv
 # Driver de base de données (Exemple : MongoDB avec Mongoose OR PostgreSQL avec pg)
 npm install mongoose 
 # ou pour SQL : npm install pg
+# pour mysql : npm install mysql2
 
 # Outil de développement (redémarrage automatique)
 npm install --save-dev nodemon
