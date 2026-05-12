@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { MdCheckCircle, MdWarning } from 'react-icons/md';
 import ConfirmDialog from '../../../components/UI/others/ConfirmDialog';
 import { resetTable } from '../../../service/resetService';
-import '../login/Login.css'; // Importation du CSS pour récupérer le thème mat-card
 
 export default function ResetDataPage() {
     const [isConfirmOpen, setConfirmOpen] = useState(false);
@@ -42,60 +41,53 @@ export default function ResetDataPage() {
     };
 
     return (
-        <div className="login-page" style={{ paddingTop: '80px', minHeight: '100vh' }}>
-            <div className="container" style={{ paddingBottom: '80px' }}>
-                <div className="row justify-content-center">
-                    <div className="col-12 col-md-8 col-lg-6">
-                        <div>
+        <div className="container-fluid py-4">
+            <h1 className="text-start mb-5 text-dark fw-bold" style={{ textAlign: "right" }}>Réinitialisation (Test)</h1>
+            
+            <div className="row justify-content-center">
+                <div className="col-12 col-md-8 col-lg-6">
+                    <div className="card shadow-sm border-0 bg-white" style={{ borderRadius: '12px' }}>
+                        <div className="card-body p-5 text-center">
                             
-                            {/* En-tête de la carte */}
-                            <div className="mat-card-header-floating text-center bg-danger">
-                                <h4 className="text-white mb-3">Réinitialisation (Test)</h4>
-                                <div className="social-icons d-flex justify-content-center mb-2">
-                                    <MdWarning size={40} className="text-white" />
+                            <div className="mb-4">
+                                <MdWarning size={60} className="text-danger mb-3" />
+                                <h4 className="fw-bold">Purge de la base de données</h4>
+                                <p className="text-muted">
+                                    Attention, cette action est irréversible. Cette interface permet de purger complètement les données via un backend de test Node.js / MySQL. 
+                                </p>
+                            </div>
+
+                            <button 
+                                className="btn btn-danger btn-lg w-100 fw-bold shadow-sm mb-4" 
+                                style={{ borderRadius: '8px' }}
+                                onClick={() => setConfirmOpen(true)}
+                                disabled={isLoading}
+                            >
+                                RESET DATA
+                            </button>
+
+                            {/* Détails du chargement ligne par ligne */}
+                            {tables.some(t => t.status !== 'idle') && (
+                                <div className="bg-light p-3 rounded text-start">
+                                    <h6 className="mb-3 text-secondary text-center">Progression :</h6>
+                                    <ul className="list-group list-group-flush bg-transparent">
+                                        {tables.map(table => (
+                                            <li key={table.name} className="list-group-item bg-transparent d-flex justify-content-between align-items-center border-0 px-0 py-2">
+                                                <span style={{ 
+                                                    textDecoration: table.status === 'done' ? 'line-through' : 'none',
+                                                    color: table.status === 'done' ? '#6c757d' : 'inherit'
+                                                }}>
+                                                    reset data from "{table.name}"
+                                                </span>
+                                                
+                                                {table.status === 'loading' && <span className="spinner-border spinner-border-sm text-primary"></span>}
+                                                {table.status === 'done' && <MdCheckCircle className="text-success" size={20} />}
+                                                {table.status === 'error' && <span className="text-danger fw-bold small">Erreur</span>}
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
-                                <p className="text-white-50 small mt-2">
-                                    Purge de la base de données. Attention, action irréversible.
-                                </p>
-                            </div>
-
-                            <div className="card-body p-4 mt-2 text-center">
-                                <p className="text-secondary mb-4">
-                                    Cette interface permet de purger complètement les données via un backend de test Node.js / MySQL. 
-                                </p>
-
-                                <button 
-                                    className="btn w-100 text-white fw-bold py-2 shadow-sm mb-4" 
-                                    style={{ background: '#dc3545', borderRadius: '8px' }}
-                                    onClick={() => setConfirmOpen(true)}
-                                    disabled={isLoading}
-                                >
-                                    RESET DATA
-                                </button>
-
-                                {/* Détails du chargement ligne par ligne */}
-                                {tables.some(t => t.status !== 'idle') && (
-                                    <div className="bg-light p-3 rounded text-start">
-                                        <h6 className="mb-3 text-secondary text-center">Progression :</h6>
-                                        <ul className="list-group list-group-flush bg-transparent">
-                                            {tables.map(table => (
-                                                <li key={table.name} className="list-group-item bg-transparent d-flex justify-content-between align-items-center border-0 px-0 py-2">
-                                                    <span style={{ 
-                                                        textDecoration: table.status === 'done' ? 'line-through' : 'none',
-                                                        color: table.status === 'done' ? '#6c757d' : 'inherit'
-                                                    }}>
-                                                        reset data from "{table.name}"
-                                                    </span>
-                                                    
-                                                    {table.status === 'loading' && <span className="spinner-border spinner-border-sm text-primary"></span>}
-                                                    {table.status === 'done' && <MdCheckCircle className="text-success" size={20} />}
-                                                    {table.status === 'error' && <span className="text-danger fw-bold small">Erreur</span>}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
+                            )}
                         </div>
                     </div>
                 </div>

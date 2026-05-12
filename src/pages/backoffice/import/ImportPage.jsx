@@ -1,7 +1,5 @@
-
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { MdCloudUpload, MdFileUpload, MdFolderZip } from 'react-icons/md';
-import '../login/Login.css';
 
 export default function ImportPage() {
     const [csvFiles, setCsvFiles] = useState([]);
@@ -32,7 +30,7 @@ export default function ImportPage() {
         
         setTimeout(() => {
             setIsLoading(false);
-            alert("Fichiers importés avec succès ! (Simulation terminèe)");
+            alert("Fichiers importés avec succès ! (Simulation terminée)");
             setCsvFiles([]);
             setZipFile(null);
             // Réinitialiser les inputs :
@@ -42,79 +40,77 @@ export default function ImportPage() {
     };
 
     return (
-        <div className="login-page" style={{ paddingTop: '50px', minHeight: '100vh' }}>
-            <div className="container" style={{ paddingBottom: '80px' }}>
-                <div className="row justify-content-center">
-                    <div className="col-12 col-md-10 col-lg-8">
-                        <div style={{ maxWidth: '100%' }}>
+        <div className="container-fluid py-4">
+            <h1 className="text-start mb-5 text-dark fw-bold" style={{ textAlign: "right" }}>Import de Données</h1>
+            
+            <div className="row justify-content-center">
+                <div className="col-12 col-md-10 col-lg-8">
+                    <div className="card shadow-sm border-0 bg-white" style={{ borderRadius: '12px' }}>
+                        <div className="card-body p-5">
                             
-                            {/* En-tête de la carte */}
-                            <div className="mat-card-header-floating text-center" style={{ background: 'var(--primary-gradient)' }}>
-                                <h4 className="text-white mb-2">Import de Données</h4>
-                                <div className="social-icons d-flex justify-content-center mb-2">
-                                    <MdCloudUpload size={40} className="text-white" />
-                                </div>
-                                <p className="text-white-50 small mt-2">
+                            <div className="text-center mb-5">
+                                <MdCloudUpload size={60} className="text-primary mb-3" />
+                                <p className="text-muted">
                                     Importez vos fichiers CSV pour les données et ZIP pour les images.
                                 </p>
                             </div>
 
-                            <div className="card-body p-4 mt-2">
-                                <form onSubmit={handleSubmit}>
-                                    
-                                    {/* Section CSV */}
-                                    <h5 className="mb-3 text-secondary d-flex align-items-center">
-                                        <MdFileUpload className="me-2" size={24} /> Fichiers de données (.csv)
-                                    </h5>
-                                    <div className="mb-4 p-4 border rounded bg-light shadow-sm">
-                                        <p className="small text-secondary mb-3">
-                                            Sélectionnez jusqu'à 3 fichiers CSV séparés par des virgules (virgules ou point-virgules).
-                                        </p>
-                                        <input 
-                                            id="csvInput"
-                                            type="file" 
-                                            className="form-control" 
-                                            accept=".csv" 
-                                            multiple 
-                                            onChange={handleCsvChange}
-                                        />
-                                        {csvFiles.length > 0 && (
-                                            <div className="mt-2 fw-bold small text-primary">
-                                                {csvFiles.length} fichier(s) sélectionné(s) : {csvFiles.map(f => f.name).join(', ')}
-                                            </div>
-                                        )}
-                                    </div>
+                            <form onSubmit={handleSubmit}>
+                                
+                                {/* Section CSV */}
+                                <h5 className="mb-3 text-secondary d-flex align-items-center justify-content-center">
+                                    <MdFileUpload className="me-2" size={24} /> Fichiers de données (.csv)
+                                </h5>
+                                <div className="mb-4 p-4 border rounded bg-light shadow-sm text-center">
+                                    <p className="small text-secondary mb-3">
+                                        Sélectionnez jusqu'à 3 fichiers CSV séparés par des virgules (virgules ou point-virgules).
+                                    </p>
+                                    <input 
+                                        id="csvInput"
+                                        type="file" 
+                                        className="form-control" 
+                                        accept=".csv" 
+                                        multiple 
+                                        onChange={handleCsvChange}
+                                    />
+                                    {csvFiles.length > 0 && (
+                                        <div className="mt-2 fw-bold small text-primary">
+                                            {csvFiles.length} fichier(s) sélectionné(s) : {csvFiles.map(f => f.name).join(', ')}
+                                        </div>
+                                    )}
+                                </div>
 
-                                    {/* Séparateur */}
-                                    <hr className="my-5 opacity-25" />
+                                {/* Séparateur */}
+                                <hr className="my-5 opacity-25" />
 
-                                    {/* Section ZIP */}
-                                    <h5 className="mb-3 text-secondary d-flex align-items-center">
-                                        <MdFolderZip className="me-2" size={24} /> Archive d'images (.zip)
-                                    </h5>
-                                    <div className="mb-5 p-4 border rounded bg-light shadow-sm">
-                                        <p className="small text-secondary mb-3">
-                                            Importez un fichier ZIP contenant l'ensemble des images associées à votre catalogue.
-                                        </p>
-                                        <input 
-                                            id="zipInput"
-                                            type="file" 
-                                            className="form-control" 
-                                            accept=".zip" 
-                                            onChange={handleZipChange}
-                                        />
-                                        {zipFile && (
-                                            <div className="mt-2 fw-bold small text-primary">
-                                                Fichier sélectionné : {zipFile.name}
-                                            </div>
-                                        )}
-                                    </div>
+                                {/* Section ZIP */}
+                                <h5 className="mb-3 text-secondary d-flex align-items-center justify-content-center">
+                                    <MdFolderZip className="me-2" size={24} /> Archive d'images (.zip)
+                                </h5>
+                                <div className="mb-5 p-4 border rounded bg-light shadow-sm text-center">
+                                    <p className="small text-secondary mb-3">
+                                        Importez un fichier ZIP contenant l'ensemble des images associées à votre catalogue.
+                                    </p>
+                                    <input 
+                                        id="zipInput"
+                                        type="file" 
+                                        className="form-control" 
+                                        accept=".zip" 
+                                        onChange={handleZipChange}
+                                    />
+                                    {zipFile && (
+                                        <div className="mt-2 fw-bold small text-primary">
+                                            Fichier sélectionné : {zipFile.name}
+                                        </div>
+                                    )}
+                                </div>
 
-                                    {/* Bouton de Soumission */}
+                                {/* Bouton de Soumission */}
+                                <div className="text-center mt-2 d-flex justify-content-center">
                                     <button 
                                         type="submit" 
-                                        className="btn w-100 text-white fw-bold py-3 mt-2 shadow-primary" 
-                                        style={{ background: 'var(--primary-gradient)', borderRadius: '8px' }}
+                                        className="btn text-white fw-bold py-3 shadow-primary" 
+                                        style={{ background: 'var(--primary-gradient)', borderRadius: '8px', minWidth: '300px' }}
                                         disabled={isLoading}
                                     >
                                         {isLoading ? (
@@ -123,8 +119,8 @@ export default function ImportPage() {
                                             "TRAITER ET IMPORTER LES DONNÉES"
                                         )}
                                     </button>
-                                </form>
-                            </div>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>

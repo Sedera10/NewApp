@@ -13,7 +13,7 @@
   --color-accent-discount: #e9c46a; /* Jaune pour les remises */
   --color-border: #e5e5e5;
 
-  --primary-gradient: linear-gradient(195deg, #829a89, #3d4a41); /* Bleu */
+  --primary-gradient: linear-gradient(195deg, #829a89, #3d4a41);
   --border-radius: 0.75rem; /* 12px */
   
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);

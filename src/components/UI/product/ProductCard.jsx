@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Heart } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import './ProductCard.css';
 
 const ProductCard = ({ product }) => {
@@ -22,11 +23,15 @@ const ProductCard = ({ product }) => {
           <Heart size={20} fill={isFavorite ? "currentColor" : "none"} />
         </button>
 
-        <img src={product.image} alt={product.name} />
+        <Link to={`/mystore/fr/product/${product.id}`}>
+          <img src={product.image} alt={product.name} />
+        </Link>
       </div>
 
       <div className="product-info">
-        <h3 className="product-name">{product.name}</h3>
+        <Link to={`/mystore/fr/product/${product.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+          <h3 className="product-name">{product.name}</h3>
+        </Link>
         <div className="price-container">
           <span className="product-price">{product.price} €</span>
           {product.oldPrice && <span className="old-price">{product.oldPrice} €</span>}

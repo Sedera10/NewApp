@@ -57,6 +57,10 @@ export const logoutFO = () => {
   localStorage.removeItem('client_session');
 }
 
+export const logoutBO = () => {
+  localStorage.removeItem('isAdmin');
+}
+
 export const isAuthenticatedAdmin = () => {
   return localStorage.getItem('isAdmin') === 'true';
 };

@@ -1,0 +1,44 @@
+/* Layout.css */
+body {
+  background-color: var(--color-white); /* Thème du projet */
+  margin: 0;
+  font-family: 'Roboto', sans-serif;
+}
+
+.layout-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar Styling */
+.sidebar {
+  width: 250px;
+  background-color: var(--color-white);
+  margin: 16px;
+  border-radius: 12px;
+  position: fixed;
+  height: calc(100vh - 32px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* Box shadow / border de substitution */
+  transition: transform 0.3s ease-in-out, width 0.3s ease-in-out;
+  z-index: 1050;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 282px;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.3s ease-in-out;
+}
+
+/* Sidebar closed state */
+.sidebar-closed .sidebar {
+  transform: translateX(-282px);
+}
+
+.sidebar-closed .main-content {
+  margin-left: 0;
+}
+
+

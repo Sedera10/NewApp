@@ -1,0 +1,40 @@
+/* Dégradé sombre typique du Material Dashboard */
+.bg-dark-gradient {
+  background-color: var(--color-primary);
+}
+
+/* Ligne de séparation (hr) stylisée */
+hr.horizontal.dark {
+  background-image: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.2), transparent);
+  background-color: transparent;
+  height: 1px;
+  border: none;
+}
+
+/* Styles de base pour les liens de navigation */
+.sidebar .nav-link {
+  border-radius: 8px; /* Coins arrondis pour les éléments de liste */
+  padding: 10px 16px;
+  transition: all 0.2s ease-in-out;
+  opacity: 0.8; /* Légèrement transparent quand inactif */
+}
+
+.sidebar .nav-link:hover {
+  background-color: rgba(0, 0, 0, 0.05); /* Effet de survol subtil */
+  opacity: 1;
+}
+
+/* LE STYLE ACTIF : Généré par <NavLink> */
+.sidebar .nav-link.active {
+  background: var(--primary-gradient);
+  box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(234, 182, 118, 0.4);
+  color: white !important; /* Force le texte blanc quand actif */
+  opacity: 1;
+  font-weight: bold;
+}
+
+/* Petite boîte pour centrer l'icône à gauche du texte */
+.sidebar .icon-box {
+  width: 30px;
+  height: 30px;
+}
