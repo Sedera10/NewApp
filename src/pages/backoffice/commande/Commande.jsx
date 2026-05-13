@@ -1,8 +1,8 @@
 ﻿import React, { useState, useEffect } from 'react';
 import './Commande.css';
-import { getCommandes, CustomName, AddresseLivraisonName, CurrentStateName } from '../../../service/Commande';
+import { commandeService } from '../../../service/Commande';
 
-// Utilitaire pour extraire la valeur brute (les balises XML parsées peuvent être des objets contenant un #text et des attributs)
+// Utilitaire pour extraire la valeur brute
 const getTextVal = (val) => {
   if (val && typeof val === 'object' && val['#text'] !== undefined) {
     return val['#text'];
@@ -26,40 +26,28 @@ const getStatusColor = (stateId) => {
   }
 };
 
-// Ce composant "Générique" remplace CustomerNameDisplay.
-// Il exécute la "fetchFunction" qu'on lui donne.
-const AsyncDataDisplay = ({ fetchFunction, valueId, placeholder = "Chargement..." }) => {
-  const [data, setData] = useState(placeholder);
-  
-  useEffect(() => {
-    let isMounted = true;
-    const fetchData = async () => {
-      const result = await fetchFunction(valueId);
-      if(isMounted) setData(result);
-    };
-    fetchData();
-    return () => { isMounted = false; };
-  }, [fetchFunction, valueId]);
-
-  return <>{data}</>;
-}
-
-
 export default function Commande() {
 
     const [commandes, setCommandes] = useState([]);
+    const [statuses, setStatuses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const loadOrders = async () => {
+    const loadOrdersAndStatuses = async () => {
         setLoading(true);
         setError(null);
         try {
-            let data = await getCommandes();
-            if (!data) data = [];
-            else if (!Array.isArray(data)) data = [data];
+            // Wait for both orders and statuses to load
+            const [data, statusesData] = await Promise.all([
+                commandeService.getCommandes(),
+                commandeService.getStatusCommandes()
+            ]);
+            
+            let statusArray = statusesData;
+            if (!Array.isArray(statusArray)) statusArray = [statusArray];
             
             setCommandes(data);
+            setStatuses(statusArray);
         } catch (err) {
             setError("Erreur lors du chargement des données : " + err.message);
         } finally {
@@ -68,8 +56,19 @@ export default function Commande() {
     };
 
     useEffect(() => {
-        loadOrders();
+        loadOrdersAndStatuses();
     }, []);
+
+    const handleChangeStatus = async (orderId, newStatusId) => {
+        try {
+            await commandeService.updateOrderStatus(orderId, newStatusId);
+            // Refresh to get the actual translated name and new state 
+            // (or we could just manually update the local state to save an API call)
+            loadOrdersAndStatuses();
+        } catch (err) {
+            alert("Erreur lors du changement de statut : " + err.message);
+        }
+    };
 
   return (
     <div className="container-fluid py-4 fade-in-up">
@@ -119,53 +118,58 @@ export default function Commande() {
                     )}
 
                     {!loading && commandes.map((order) => {
-                      const idText = getTextVal(order.id);
-                      const refText = getTextVal(order.reference);
-                      const totalPaid = Number(getTextVal(order.total_paid) || 0).toFixed(2);
-                      const paymentText = getTextVal(order.payment);
-                      const dateAddText = getTextVal(order.date_add);
                       const badgeColor = getStatusColor(order.current_state);
                       
                       return (
-                        <tr key={idText}>
+                        <tr key={order.id}>
                           <td>
-                            <p className="text-center font-weight-bold mb-0">{idText}</p>
+                            <p className="text-center font-weight-bold mb-0">{order.id}</p>
                           </td>
                           <td>
-                            <p className="text-sm font-weight-bold mb-0">{refText}</p>
+                            <p className="text-sm font-weight-bold mb-0">{order.reference}</p>
                           </td>
                           <td>
                             <p className="text-sm mb-0">
-                               <AsyncDataDisplay fetchFunction={AddresseLivraisonName} valueId={order.id_address_delivery} />
+                               {order.addressName}
                             </p>
                           </td>
                           <td>
                             <p className="text-sm mb-0">
-                               <AsyncDataDisplay fetchFunction={CustomName} valueId={order.id_customer} />
+                               {order.customerName}
                             </p>
                           </td>
                           <td>
                             <p className="text-sm font-weight-bold mb-0">
-                              {totalPaid} Ar
+                              {Number(order.total_paid || 0).toFixed(2)} Ar
                             </p>
                           </td>
                           <td>
-                            <p className="text-sm mb-0">{paymentText}</p>
+                            <p className="text-sm mb-0">{order.payment}</p>
                           </td>
                           <td>
-                            <span className={`badge ${badgeColor}`}>
-                              <AsyncDataDisplay fetchFunction={CurrentStateName} valueId={order.current_state} />
-                            </span>
+                            <select 
+                                className={`badge ${badgeColor}`}
+                                value={String(getTextVal(order.current_state))}
+                                onChange={(e) => handleChangeStatus(order.id, e.target.value)}
+                             >
+                               {statuses.map(s => {
+                                   const sid = getTextVal(s.id);
+                                   // PrestaShop uses language arrays or objects. Let's just do a naive extract if it's there, 
+                                   // or reuse CurrentStateName logic if needed. Here we try to get a string safely:
+                                   const sname = s.name && s.name.language ? 
+                                       (Array.isArray(s.name.language) ? getTextVal(s.name.language[0]) : getTextVal(s.name.language)) 
+                                       : (getTextVal(s.name) || `Statut ${sid}`);
+                                   return <option key={sid} value={sid}>{sname}</option>;
+                               })}
+                             </select>
                           </td>
                           <td>
                             <p className="text-sm mb-0 text-secondary">
-                              {dateAddText ? new Date(dateAddText).toLocaleString() : 'N/A'}
+                              {order.date_add ? new Date(order.date_add).toLocaleString() : 'N/A'}
                             </p>
                           </td>
-                          <td className="text-end pe-4">
-                            <button className="btn btn-link text-secondary mb-0 p-0 fs-5" aria-label="Voir les détails">
-                              🔍
-                            </button>
+                          <td className="text-end pe-4 d-flex align-items-center justify-content-end gap-2">
+                             <a href="#">Details</a>
                           </td>
                         </tr>
                       );
