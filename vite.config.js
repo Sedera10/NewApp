@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/prestashop/api': {
-        target: 'http://localhost',
+        target: 'http://localhost:80',
         changeOrigin: true,
       }
     }

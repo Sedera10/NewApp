@@ -5,23 +5,40 @@ import './Header.css';
 import logoUrl from '/logo.png';
 import { logoutFO, logoutBO } from '../../service/authService';
 import { urlContains } from '../../service/Util';
+import { localCartService } from '../../service/Cart';
 
 const Header = ({ toggleSidebar, isSidebarOpen }) => {
   const [customer, setCustomer] = useState(null);
+  const [cartCount, setCartCount] = useState(0);
+  const navigate = useNavigate();
 
   const loadCustomer = () => {
     const currentUser = JSON.parse(localStorage.getItem('client_session'));
     if (currentUser?.isLoggedIn) {
       setCustomer(currentUser);
+      updateCartCount(currentUser.id);
+    } else {
+      updateCartCount(0);
     }
   };
-  
+
+  const updateCartCount = (customerId = 0) => {
+    const count = localCartService.getTotalItems(customerId);
+    setCartCount(count);
+  };
+
   useEffect(() => {
     loadCustomer();
+
+    const handleStorageChange = () => {
+      loadCustomer();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const location = useLocation();
-  const navigate = useNavigate();
   const adminMode = urlContains(location.pathname, "/admin");
   const logoutRedirect = adminMode ? "/mystore/admin/login" : "mystore/fr/"
 
@@ -74,31 +91,34 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
               ) : (
                 <div className="action-btn logged-in-user">
                   <div className="icon-wrapper">
-                    <User size={22} /> 
+                    <User size={22} />
                   </div>
                   <span>{customer.firstname} {customer.lastname}</span>
                 </div>
               )}
-              
-              <button className="action-btn cart-btn">
+
+              <button
+                className="action-btn cart-btn"
+                onClick={() => navigate('/mystore/fr/cart')}
+              >
                 <div className="icon-wrapper">
                   <ShoppingCart size={22} />
                 </div>
                 <span>Panier</span>
-                <span className="cart-count">2</span>
+                {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
               </button>
 
               {/* Bouton déconnexion à droite si connecté */}
               {customer && (
                 <div className="logout-container ms-3">
-                  <button 
-                    type="button" 
-                    className="logout-btn" 
+                  <button
+                    type="button"
+                    className="logout-btn"
                     onClick={() => {
                       logoutFO();
                       setCustomer(null);
                       window.location.href = "/mystore/fr";
-                    }} 
+                    }}
                   >
                     Déconnexion
                   </button>
@@ -110,8 +130,8 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
           <>
             {/* Header Admin - Section Gauche */}
             <div className="admin-header-left d-flex align-items-center gap-3" style={{ flex: 1 }}>
-              <button 
-                className="btn btn-light d-flex align-items-center justify-content-center p-2 mb-0" 
+              <button
+                className="btn btn-light d-flex align-items-center justify-content-center p-2 mb-0"
                 onClick={toggleSidebar}
                 style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}
               >
@@ -124,7 +144,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
                 </ol>
               </nav>
             </div>
-            
+
             {/* Header Admin - Section Centre (Logo) */}
             <div className="admin-header-center d-flex justify-content-center" style={{ flex: 1 }}>
               <img src={logoUrl} alt="MyStore logo" style={{ height: '40px', width: 'auto', objectFit: 'contain' }} />
@@ -133,13 +153,13 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
             {/* Header Admin - Section Droite */}
             <div className="admin-header-right d-flex justify-content-end align-items-center user-actions" style={{ flex: 1 }}>
                <div className="logout-container ms-auto">
-                 <button 
-                   type="button" 
-                   className="btn btn-outline-danger btn-sm px-3 py-1" 
+                 <button
+                   type="button"
+                   className="btn btn-outline-danger btn-sm px-3 py-1"
                    onClick={() => {
-                     logoutBO(); // ou logout Admin si différent
+                     logoutBO();
                      window.location.href = "/mystore/admin/login";
-                   }} 
+                   }}
                    style={{ borderRadius: '6px' }}
                  >
                    Logout
@@ -147,7 +167,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
                </div>
             </div>
           </>
-        )} 
+        )}
       </div>
     </header>
   );

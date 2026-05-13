@@ -1,24 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import Header from '../../../components/layout/Header';
 import { productService } from '../../../service/Product';
+import { localCartService } from '../../../service/Cart';
 import './ProductDetails.css';
 
 const ProductDetails = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [quantity, setQuantity] = useState(1);
+  const [addedToCart, setAddedToCart] = useState(false);
 
   useEffect(() => {
     const fetchProduct = async () => {
       try {
         const rawProduct = await productService.getProductById(id);
         const formatted = productService.formatProduct(rawProduct);
-        
+
         // Add additional details from rawProduct if needed (e.g. description)
         if (formatted) {
           const getText = (val) => (val && typeof val === 'object' && val['#text'] !== undefined) ? val['#text'] : val;
-          
+
           let desc = "Aucune description";
           if (rawProduct?.description) {
               if (Array.isArray(rawProduct.description.language)) {
@@ -29,7 +33,7 @@ const ProductDetails = () => {
                   desc = getText(rawProduct.description);
               }
           }
-            
+
           formatted.description = desc;
         }
 
@@ -45,6 +49,18 @@ const ProductDetails = () => {
       fetchProduct();
     }
   }, [id]);
+
+  const handleAddToCart = () => {
+    const currentUser = JSON.parse(localStorage.getItem('client_session'));
+    const customerId = currentUser?.id || 0;
+
+    localCartService.addToCart(customerId, product, quantity);
+    setAddedToCart(true);
+
+    setTimeout(() => {
+      setAddedToCart(false);
+    }, 2000);
+  };
 
   if (loading) return <div>Chargement...</div>;
   if (!product) return <div>Produit non trouvé</div>;
@@ -63,7 +79,28 @@ const ProductDetails = () => {
             <p className="product-price">{product.price} €</p>
             {product.isNew && <span className="badge badge-new">Nouveau</span>}
             <div className="product-description" dangerouslySetInnerHTML={{ __html: product.description || 'Aucune description disponible.' }} />
-            <button className="add-to-cart-btn">Ajouter au panier</button>
+
+            <div className="product-actions">
+              <div className="quantity-selector">
+                <button onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button>
+                <input type="number" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))} min="1" />
+                <button onClick={() => setQuantity(quantity + 1)}>+</button>
+              </div>
+
+              <button
+                className={`add-to-cart-btn ${addedToCart ? 'success' : ''}`}
+                onClick={handleAddToCart}
+              >
+                {addedToCart ? '✓ Ajouté au panier' : 'Ajouter au panier'}
+              </button>
+            </div>
+
+            <button
+              className="view-cart-link"
+              onClick={() => navigate('/mystore/fr/cart')}
+            >
+              Voir le panier →
+            </button>
           </div>
         </div>
       </div>
