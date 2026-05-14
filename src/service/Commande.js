@@ -11,30 +11,150 @@ const getTextVal = (val) => {
 };
 
 export const commandeService = {
-  getPaymentModules: async () => {
+  getOrderDetails: async (orderId) => {
     try {
-      // Try the API endpoint first
-      const response = await api.get('/modules?display=full');
+      const response = await api.get(`/orders/${orderId}?display=full`);
       const jsonObj = xmlToJson(response.data);
-      let modules = jsonObj?.prestashop?.modules?.module || [];
-      if (!Array.isArray(modules)) modules = [modules];
+      const order = jsonObj?.prestashop?.order;
 
-      const paymentModules = modules.filter(mod => {
-        const active = getTextVal(mod.active);
-        const name = getTextVal(mod.name);
-        const isPaymentModule = ['bankwire', 'cash_on_delivery', 'ps_checkpayment', 'stripe', 'paypal'].includes(name);
-        return (active === '1' || active === 1) && isPaymentModule;
-      });
+      if (!order) return null;
 
-      return paymentModules.map(mod => ({
-        name: getTextVal(mod.name),
-        displayName: getTextVal(mod.display_name) || getTextVal(mod.name)
+      const idCustomer = getTextVal(order.id_customer);
+      const idAddressDelivery = getTextVal(order.id_address_delivery);
+      const idState = getTextVal(order.current_state);
+
+      // Fetch customer info
+      let customerName = `Client #${idCustomer}`;
+      try {
+        if (idCustomer && idCustomer !== '0') {
+          const customer = await getCustomerById(idCustomer);
+          customerName = `${customer.firstname} ${customer.lastname}`;
+        }
+      } catch (err) { }
+
+      // Fetch address info
+      let addressInfo = { fullName: `Adresse #${idAddressDelivery}`, address: '' };
+      try {
+        if (idAddressDelivery && idAddressDelivery !== '0') {
+          const address = await getAddresseById(idAddressDelivery);
+          addressInfo = {
+            fullName: `${address.firstname} ${address.lastname}`,
+            address: `${address.address1}, ${address.postcode} ${address.city}`,
+            country: address.country,
+            phone: address.phone
+          };
+        }
+      } catch (err) { }
+
+      // Fetch order state name
+      let stateName = 'Inconnu';
+      try {
+        if (idState) {
+          const stateResponse = await api.get(`/order_states/${idState}`);
+          const stateJson = xmlToJson(stateResponse.data);
+          stateName = getTextVal(stateJson?.prestashop?.order_state?.name);
+        }
+      } catch (err) { }
+
+      // Format order rows with product images
+      let orderRows = order?.associations?.order_rows?.order_row || [];
+      if (!Array.isArray(orderRows)) orderRows = [orderRows];
+
+      const formattedRows = await Promise.all(orderRows.map(async (row) => {
+        const productId = getTextVal(row.product_id);
+        let productImage = '/placeholder.png';
+
+        // Fetch product image
+        try {
+          const productResponse = await api.get(`/products/${productId}?display=full`);
+          const productJson = xmlToJson(productResponse.data);
+          const product = productJson?.prestashop?.product;
+
+          if (product?.associations?.images?.image) {
+            let images = product.associations.images.image;
+            if (!Array.isArray(images)) images = [images];
+            const firstImage = images[0];
+            const defaultImageId = getTextVal(product.id_default_image);
+            productImage = defaultImageId ? `${api.defaults.baseURL}/images/products/${productId}/${defaultImageId}/?ws_key=${api.defaults.params.ws_key}` : 'https://picsum.photos/300';
+          }
+        } catch (err) {
+          console.error(`Error fetching product image for ${productId}:`, err);
+        }
+
+        return {
+          id: getTextVal(row.id_),
+          productId: productId,
+          productName: getTextVal(row.product_name),
+          productReference: getTextVal(row.product_reference),
+          quantity: parseInt(getTextVal(row.product_quantity), 10) || 0,
+          productPrice: parseFloat(getTextVal(row.product_price)) || 0,
+          unitPriceTaxIncl: parseFloat(getTextVal(row.unit_price_tax_incl)) || 0,
+          productImage: productImage
+        };
       }));
+
+      return {
+        id: getTextVal(order.id),
+        reference: getTextVal(order.reference),
+        totalPaid: parseFloat(getTextVal(order.total_paid)) || 0,
+        totalProducts: parseFloat(getTextVal(order.total_products)) || 0,
+        totalShipping: parseFloat(getTextVal(order.total_shipping)) || 0,
+        payment: getTextVal(order.payment),
+        module: getTextVal(order.module),
+        dateAdd: getTextVal(order.date_add),
+        currentState: idState,
+        stateName: stateName,
+        customerName: customerName,
+        customerId: idCustomer,
+        addressDelivery: addressInfo,
+        idAddressDelivery: idAddressDelivery,
+        carrier: getTextVal(order.id_carrier),
+        orderRows: formattedRows
+      };
     } catch (error) {
-      console.error("Error fetching payment modules from API:", error);
-      // Fallback to default list - in real scenario these would be fetched from config
+      console.error(`Erreur lors de la récupération de la commande ${orderId}:`, error);
+      return null;
+    }
+  },
+
+  getPaymentModules: async () => {
+    return [
+      { name: 'ps_cashondelivery', displayName: 'Payer comptant à la livraison' }
+    ];
+  },
+
+  getShippingCarriers: async () => {
+    try {
+      const response = await api.get('/carriers?display=full');
+      const jsonObj = xmlToJson(response.data);
+      let carriers = jsonObj?.prestashop?.carriers?.carrier || [];
+      if (!Array.isArray(carriers)) carriers = [carriers];
+
+      const extractLanguageText = (val) => {
+        if (!val) return '';
+        if (typeof val === 'string') return val;
+        if (val['#text']) return val['#text'];
+        if (val.language) {
+          if (Array.isArray(val.language)) {
+            return val.language[0]['#text'] || val.language[0];
+          }
+          return val.language['#text'] || val.language;
+        }
+        return '';
+      };
+
+      return carriers
+        .filter(c => getTextVal(c.active) === '1' || getTextVal(c.active) === 1)
+        .map(c => ({
+          id: getTextVal(c.id),
+          name: extractLanguageText(c.name),
+          delay: extractLanguageText(c.delay),
+          price: parseFloat(getTextVal(c.price)) || 0
+        }));
+    } catch (error) {
+      console.error("Error fetching carriers:", error);
       return [
-        { name: 'cash_on_delivery', displayName: 'Payer comptant à la livraison' }
+        { id: 0, name: 'Gratuit', delay: '5-7 jours', price: 0 }
       ];
     }
   },
@@ -44,28 +164,34 @@ export const commandeService = {
     const jsonObj = xmlToJson(response.data);
     let orders = jsonObj?.prestashop?.orders?.order || [];
     if (!Array.isArray(orders)) orders = [orders];
-    
+
     // Format all orders "en un coup" by fetching their nested relations concurrently
     const formattedOrders = await Promise.all(orders.map(async (order) => {
         const idCustomer = getTextVal(order.id_customer);
-        const idAddress = getTextVal(order.id_address_delivery);
+        const idAddressDelivery = getTextVal(order.id_address_delivery);
         const idState = getTextVal(order.current_state);
 
+        // Only fetch address if ID is valid
+        let addressName = `Adresse #${idAddressDelivery}`;
+        if (idAddressDelivery && idAddressDelivery !== '0' && idAddressDelivery !== 0) {
+          addressName = await commandeService.AddresseLivraisonName(idAddressDelivery);
+        }
+
         // Fetch relations in parallel for maximum speed
-        const [customerName, addressName, stateName] = await Promise.all([
+        const [customerName, stateName] = await Promise.all([
             commandeService.CustomName(idCustomer),
-            commandeService.AddresseLivraisonName(idAddress),
             commandeService.CurrentStateName(idState)
         ]);
 
         return {
             id: getTextVal(order.id),
+            idCustomer: idCustomer,
             reference: getTextVal(order.reference),
             total_paid: getTextVal(order.total_paid),
             payment: getTextVal(order.payment),
             date_add: getTextVal(order.date_add),
             current_state: idState,
-            
+
             // Nested relations stringified properties
             customerName: customerName,
             addressName: addressName,
@@ -145,12 +271,12 @@ export const commandeService = {
               payment: orderData.payment || 'Transfer',
               module: orderData.module || 'bankwire',
               conversion_rate: 1,
-              total_paid: orderData.total_paid,
-              total_paid_real: orderData.total_paid_real || orderData.total_paid,
-              total_products: orderData.total_products,
-              total_products_wt: orderData.total_products_wt || orderData.total_products,
-              total_shipping: orderData.total_shipping || 0,
-              total_shipping_tax_incl: orderData.total_shipping_tax_incl || orderData.total_shipping || 0,
+              total_paid: parseFloat(orderData.total_paid.toFixed(2)),
+              total_paid_real: parseFloat((orderData.total_paid_real || orderData.total_paid).toFixed(2)),
+              total_products: parseFloat(orderData.total_products.toFixed(2)),
+              total_products_wt: parseFloat((orderData.total_products_wt || orderData.total_products).toFixed(2)),
+              total_shipping: parseFloat((orderData.total_shipping || 0).toFixed(2)),
+              total_shipping_tax_incl: parseFloat((orderData.total_shipping_tax_incl || orderData.total_shipping || 0).toFixed(2)),
               current_state: 1
           };
 
@@ -173,6 +299,38 @@ export const commandeService = {
           console.error("Error data:", error.response?.data);
           console.error("Error text:", error.response?.text);
           console.error("Error full response:", error.response);
+          throw error;
+      }
+  },
+
+  updateOrder: async (orderId, orderData) => {
+      try {
+          console.log('Updating order:', orderId, 'with data:', orderData);
+
+          const payload = {
+              id: orderId,
+              id_cart: orderData.id_cart || 0,
+              id_customer: orderData.id_customer || 0,
+              id_currency: orderData.id_currency || 1,
+              id_lang: orderData.id_lang || 1,
+              ...orderData
+          };
+
+          const xmlPayload = buildPrestashopXml('order', payload);
+          console.log('Update order XML:', xmlPayload);
+
+          const response = await api.put(`/orders/${orderId}`, xmlPayload, {
+              headers: {
+                  'Content-Type': 'application/xml'
+              }
+          });
+
+          const jsonObj = xmlToJson(response.data);
+          console.log('Order update response:', jsonObj);
+          return jsonObj?.prestashop?.order;
+      } catch (error) {
+          console.error(`Error updating order ${orderId}:`, error);
+          console.error("Error response data:", error.response?.data);
           throw error;
       }
   },

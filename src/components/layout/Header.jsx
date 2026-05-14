@@ -100,6 +100,7 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
               <button
                 className="action-btn cart-btn"
                 onClick={() => navigate('/mystore/fr/cart')}
+                disabled={!customer}
               >
                 <div className="icon-wrapper">
                   <ShoppingCart size={22} />
@@ -107,6 +108,20 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
                 <span>Panier</span>
                 {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
               </button>
+
+              { customer && (
+                <div className="logout-container ms-3">
+                  <button
+                    type="button"
+                    className="logout-btn"
+                    onClick={() => {
+                      window.location.href = "/mystore/fr/commandes";
+                    }}
+                  >
+                    Mes Commandes
+                  </button>
+                </div>
+              )}
 
               {/* Bouton déconnexion à droite si connecté */}
               {customer && (
@@ -149,6 +164,8 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
             <div className="admin-header-center d-flex justify-content-center" style={{ flex: 1 }}>
               <img src={logoUrl} alt="MyStore logo" style={{ height: '40px', width: 'auto', objectFit: 'contain' }} />
             </div>
+
+            
 
             {/* Header Admin - Section Droite */}
             <div className="admin-header-right d-flex justify-content-end align-items-center user-actions" style={{ flex: 1 }}>

@@ -9,11 +9,13 @@ import HomePage from './pages/frontoffice/home/HomePage'
 import ProductDetails from './pages/frontoffice/product/ProductDetails'
 import CartPage from './pages/frontoffice/cart/CartPage'
 import CheckoutPage from './pages/frontoffice/checkout/CheckoutPage'
+import CommandePage from './pages/frontoffice/commande/Commande'
+import CommandeDetail from './pages/frontoffice/commande/CommandeDetail'
 import Login from './pages/backoffice/login/Login'
 import ImportPage from './pages/backoffice/import/ImportPage'
 import LogOut from './pages/backoffice/login/LogOut'
 import ResetDataPage from './pages/backoffice/reset/ResetDataPage'
-import CommandePage from './pages/backoffice/commande/Commande'
+import CommandePageAdmin from './pages/backoffice/commande/Commande'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import Layout from './pages/backoffice/layout/Layout'
 
@@ -28,6 +30,8 @@ function App() {
         <Route path="/mystore/fr/product/:id" element={<ProductDetails />} />
         <Route path="/mystore/fr/cart" element={<CartPage />} />
         <Route path="/mystore/fr/checkout" element={<CheckoutPage />} />
+        <Route path="/mystore/fr/commandes" element={<CommandePage />} />
+        <Route path="/mystore/fr/commandes/:orderId" element={<CommandeDetail />} />
         <Route path="/mystore/fr/login"element={<Login />} />
         {/* Backoffice */}
         <Route path="/mystore/admin/login" element={<Login />} />
@@ -61,7 +65,7 @@ function App() {
             path="/mystore/admin/commandes"
             element={
               <ProtectedRoute>
-                <CommandePage />
+                <CommandePageAdmin />
               </ProtectedRoute>
             }
           />

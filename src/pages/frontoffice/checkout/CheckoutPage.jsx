@@ -19,7 +19,7 @@ const CheckoutPage = () => {
   const [loading, setLoading] = useState(true);
   const [orderError, setOrderError] = useState('');
 
-  const steps = ['Infos personnelles', 'Adresse de livraison', 'Mode de paiement', 'Confirmation'];
+  const steps = ['Infos personnelles', 'Adresse de livraison', 'Mode de livraison', 'Mode de paiement', 'Confirmation'];
 
   // Form states
   const [personalInfo, setPersonalInfo] = useState({
@@ -40,6 +40,8 @@ const CheckoutPage = () => {
 
   const [paymentModules, setPaymentModules] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('');
+  const [shippingCarriers, setShippingCarriers] = useState([]);
+  const [selectedCarrier, setSelectedCarrier] = useState(null);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
 
   useEffect(() => {
@@ -93,6 +95,14 @@ const CheckoutPage = () => {
         if (modules.length > 0) {
           setPaymentMethod(modules[0].name);
         }
+
+        // Fetch shipping carriers
+        const carriers = await commandeService.getShippingCarriers();
+        console.log('Shipping carriers:', carriers);
+        setShippingCarriers(carriers);
+        if (carriers.length > 0) {
+          setSelectedCarrier(carriers[0]);
+        }
       } catch (error) {
         console.error('Error initializing checkout:', error);
       } finally {
@@ -142,6 +152,12 @@ const CheckoutPage = () => {
     }
   };
 
+  const handleContinueShipping = () => {
+    if (selectedCarrier) {
+      setCurrentStep(3);
+    }
+  };
+
   const handleCreateOrder = async () => {
     if (!agreeToTerms) {
       setOrderError('Veuillez accepter les conditions générales');
@@ -163,7 +179,8 @@ const CheckoutPage = () => {
       const cartItems = cart.map(item => ({
         id_product: item.id,
         id_product_attribute: 0,
-        quantity: item.quantity
+        quantity: item.quantity,
+        id_address_delivery: getTextVal(selectedAddress.id)
       }));
 
       // Step 1: Create a cart in Prestashop
@@ -174,7 +191,8 @@ const CheckoutPage = () => {
         customer.id,
         cartItems,
         1,
-        1
+        1,
+        getTextVal(selectedAddress.id)
       );
 
       console.log('Cart response from API:', cartInPrestashop);
@@ -189,15 +207,20 @@ const CheckoutPage = () => {
 
       // Step 2: Create the order with the cart
       console.log('Step 2: Creating order with cart...');
+      const addressId = getTextVal(selectedAddress.id);
+      const carrierId = selectedCarrier?.id || 2;
+      const totalWithShipping = totalAmount + (selectedCarrier?.price || 0);
       const orderData = {
         id_cart: cartId,
         id_customer: customer.id,
-        id_address_delivery: getTextVal(selectedAddress.id),
-        id_address_invoice: getTextVal(selectedAddress.id),
+        id_address_delivery: addressId,
+        id_address_invoice: addressId,
+        id_carrier: carrierId,
         payment: paymentModules.find(m => m.name === paymentMethod)?.displayName || paymentMethod,
         module: paymentMethod,
-        total_paid: totalAmount,
-        total_products: totalAmount,
+        total_paid: parseFloat(totalWithShipping.toFixed(2)),
+        total_products: parseFloat(totalAmount.toFixed(2)),
+        total_shipping: parseFloat((selectedCarrier?.price || 0).toFixed(2)),
         items: cart.map(item => ({
           id_product: item.id,
           product_name: item.name,
@@ -377,8 +400,38 @@ const CheckoutPage = () => {
               </div>
             )}
 
-            {/* Step 3: Payment Method */}
+            {/* Step 3: Shipping Mode */}
             {currentStep === 2 && (
+              <div className="checkout-step">
+                <h2>Mode de livraison</h2>
+                <div className="shipping-options">
+                  {shippingCarriers.length === 0 ? (
+                    <p style={{ color: '#666' }}>Aucun mode de livraison disponible.</p>
+                  ) : (
+                    shippingCarriers.map(carrier => (
+                      <label key={carrier.id} className="shipping-option">
+                        <input
+                          type="radio"
+                          checked={selectedCarrier?.id === carrier.id}
+                          onChange={() => setSelectedCarrier(carrier)}
+                        />
+                        <div className="shipping-info">
+                          <span className="shipping-name">{getTextVal(carrier.name)}</span>
+                          <span className="shipping-delay">{getTextVal(carrier.delay)}</span>
+                          <span className="shipping-price">{carrier.price === 0 ? 'Gratuit' : getTextVal(carrier.price)}</span>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <button onClick={handleContinueShipping} className="btn-continue">
+                  Continuer vers le paiement
+                </button>
+              </div>
+            )}
+
+            {/* Step 4: Payment Method */}
+            {currentStep === 3 && (
               <div className="checkout-step">
                 <h2>Mode de paiement</h2>
                 <div className="payment-options">
@@ -401,14 +454,14 @@ const CheckoutPage = () => {
                     ))
                   )}
                 </div>
-                <button onClick={() => setCurrentStep(3)} className="btn-continue">
+                <button onClick={() => setCurrentStep(4)} className="btn-continue">
                   Confirmer la commande
                 </button>
               </div>
             )}
 
-            {/* Step 4: Confirmation */}
-            {currentStep === 3 && (
+            {/* Step 5: Confirmation */}
+            {currentStep === 4 && (
               <div className="checkout-step">
                 <h2>Confirmation de la commande</h2>
 
@@ -455,6 +508,15 @@ const CheckoutPage = () => {
                     </p>
                   </div>
 
+                  <div className="review-section">
+                    <h3>Mode de livraison</h3>
+                    <p>{selectedCarrier?.name}</p>
+                    <p style={{ fontSize: '0.9em', color: '#666' }}>{getTextVal(selectedCarrier?.delay)}</p>
+                    <p style={{ fontSize: '0.9em', color: '#666' }}>
+                      {selectedCarrier?.price === 0 ? 'Gratuit' : selectedCarrier?.price?.toFixed(2) + ' €'}
+                    </p>
+                  </div>
+
                   {orderError && <div className="error-message">{orderError}</div>}
 
                   <div className="terms-agree">
@@ -473,7 +535,7 @@ const CheckoutPage = () => {
                     disabled={!agreeToTerms}
                     className="btn-confirm-order"
                   >
-                    Confirmer et payer ({totalAmount.toFixed(2)} €)
+                    Confirmer et payer ({(totalAmount + (selectedCarrier?.price || 0)).toFixed(2)} €)
                   </button>
                 </div>
               </div>
@@ -495,11 +557,11 @@ const CheckoutPage = () => {
               <div className="summary-divider"></div>
               <div className="summary-total">
                 <span>Total:</span>
-                <span className="total-amount">{totalAmount.toFixed(2)} €</span>
+                <span className="total-amount">{(totalAmount + (selectedCarrier?.price || 0)).toFixed(2)} €</span>
               </div>
               <div className="summary-shipping">
                 <span>Frais de port:</span>
-                <span>Gratuit</span>
+                <span>{selectedCarrier?.price === 0 || !selectedCarrier?.price ? 'Gratuit' : selectedCarrier.price.toFixed(2) + ' €'}</span>
               </div>
             </div>
           </div>

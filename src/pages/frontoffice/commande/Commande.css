@@ -1,0 +1,289 @@
+.commandes-page {
+  background: #f8f9fa;
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+
+.commandes-page .container {
+  max-width: 1400px;
+}
+
+.commandes-page h1 {
+  color: #2c3e50;
+  font-weight: 700;
+}
+
+.empty-state {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 60px 20px;
+}
+
+.empty-icon {
+  font-size: 48px;
+}
+
+.empty-state h2 {
+  color: #2c3e50;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  color: #7f8c8d;
+  margin-bottom: 25px;
+}
+
+/* Tableau Bootstrap customisé */
+.table-responsive {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table {
+  border: none;
+}
+
+.table thead {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.table thead th {
+  color: #2c3e50;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 18px 15px;
+  border: none;
+  vertical-align: middle;
+}
+
+.fw-600 {
+  font-weight: 600;
+}
+
+.table tbody tr {
+  border-bottom: 1px solid #ecf0f1;
+  transition: all 0.2s ease;
+}
+
+.table tbody tr:hover {
+  background: #f8f9fa;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.table tbody td {
+  padding: 16px 15px;
+  color: #34495e;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.table tbody td strong {
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.text-muted {
+  color: #7f8c8d !important;
+}
+
+.text-success {
+  color: #27ae60 !important;
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* Badges Bootstrap customisés */
+.badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.bg-primary {
+  background-color: #3498db !important;
+}
+
+.bg-success {
+  background-color: #27ae60 !important;
+}
+
+.bg-warning {
+  background-color: #f39c12 !important;
+  color: white !important;
+}
+
+.bg-danger {
+  background-color: #e74c3c !important;
+}
+
+.bg-secondary {
+  background-color: #95a5a6 !important;
+}
+
+/* Boutons */
+.btn {
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 15px;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background: #3498db;
+  border-color: #3498db;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #2980b9;
+  border-color: #2980b9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+}
+
+.btn-outline-primary {
+  color: #3498db;
+  border-color: #3498db;
+}
+
+.btn-outline-primary:hover {
+  background: #3498db;
+  border-color: #3498db;
+  color: white;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Shadow Bootstrap */
+.shadow-sm {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Spacing Bootstrap */
+.mb-0 {
+  margin-bottom: 0 !important;
+}
+
+.mb-3 {
+  margin-bottom: 1rem !important;
+}
+
+.mb-4 {
+  margin-bottom: 1.5rem !important;
+}
+
+.py-5 {
+  padding-top: 3rem !important;
+  padding-bottom: 3rem !important;
+}
+
+.py-5 {
+  padding-top: 3rem !important;
+  padding-bottom: 3rem !important;
+}
+
+.d-flex {
+  display: flex !important;
+}
+
+.justify-content-between {
+  justify-content: space-between !important;
+}
+
+.align-items-center {
+  align-items: center !important;
+}
+
+.align-middle {
+  vertical-align: middle !important;
+}
+
+.h2 {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .table thead {
+    display: none;
+  }
+
+  .table tbody tr {
+    display: block;
+    margin-bottom: 15px;
+    border: 1px solid #ecf0f1;
+    border-radius: 6px;
+    background: white;
+  }
+
+  .table tbody td {
+    display: block;
+    text-align: right;
+    padding: 12px 15px;
+    border-bottom: 1px solid #ecf0f1;
+  }
+
+  .table tbody td:before {
+    content: attr(data-label);
+    float: left;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: #95a5a6;
+    letter-spacing: 0.5px;
+  }
+
+  .table tbody td:last-child {
+    border-bottom: none;
+  }
+
+  .btn-sm {
+    width: 100%;
+    display: block;
+  }
+
+  .d-flex {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  .mb-4 {
+    margin-bottom: 1rem !important;
+  }
+
+  .h2 {
+    font-size: 1.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .h2 {
+    font-size: 1.5rem;
+  }
+
+  .py-5 {
+    padding-top: 1.5rem !important;
+    padding-bottom: 1.5rem !important;
+  }
+
+  .table tbody td {
+    font-size: 13px;
+  }
+}

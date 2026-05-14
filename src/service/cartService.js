@@ -98,11 +98,13 @@ export const cartService = {
         };
     },
 
-    createCart: async (idCustomer = 0, items = [], idCurrency = 1, idLang = 1) => {
+    createCart: async (idCustomer = 0, items = [], idCurrency = 1, idLang = 1, addressId) => {
         try {
             const cartData = {
                 id_currency: idCurrency,
                 id_lang: idLang,
+                id_address_delivery: addressId,
+                id_address_invoice: addressId
             };
 
             if (idCustomer > 0) {
@@ -149,7 +151,9 @@ export const cartService = {
                 ...cartData
              };
 
+             console.log('Update cart payload:', payload);
              const xmlPayload = buildPrestashopXml('cart', payload);
+             console.log('Update cart XML:', xmlPayload);
 
              const response = await api.put(`/carts/${idCart}`, xmlPayload, {
                 headers: {
@@ -158,9 +162,11 @@ export const cartService = {
              });
 
              const jsonObj = xmlToJson(response.data);
+             console.log('Cart update response:', jsonObj);
              return jsonObj?.prestashop?.cart;
         } catch (error) {
              console.error(`Erreur lors de la mise à jour du panier ${idCart}:`, error);
+             console.error("Error response data:", error.response?.data);
              throw error;
         }
     }

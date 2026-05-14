@@ -8,9 +8,19 @@ export const getAddresses = async () => {
 };
 
 export const getAddresseById = async (id) => {
-  const response = await api.get(`/addresses/${id}?display=full`);
-  const jsonObj = xmlToJson(response.data);
-  return jsonObj.prestashop.address;
+  // Avoid 404 errors for invalid IDs
+  if (!id || id === '0' || id === 0) {
+    console.warn('Invalid address ID:', id);
+    return null;
+  }
+  try {
+    const response = await api.get(`/addresses/${id}?display=full`);
+    const jsonObj = xmlToJson(response.data);
+    return jsonObj.prestashop.address;
+  } catch (error) {
+    console.error("Error fetching address:", error);
+    return null;
+  }
 };
 
 export const getAddressesByCustomerId = async (customerId) => {
