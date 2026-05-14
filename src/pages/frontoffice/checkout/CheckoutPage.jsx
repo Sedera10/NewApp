@@ -33,9 +33,10 @@ const CheckoutPage = () => {
     firstname: '',
     lastname: '',
     address1: '',
+    phone :'',
     city: '',
-    postcode: '',
-    country: 'FR'
+    postcode: '75002',
+    country: 8
   });
 
   const [paymentModules, setPaymentModules] = useState([]);
@@ -120,20 +121,23 @@ const CheckoutPage = () => {
   };
 
   const handleContinueAddress = async () => {
-    if (selectedAddress || (newAddress.firstname && newAddress.address1 && newAddress.city && newAddress.postcode)) {
-      if (newAddress.firstname && !selectedAddress) {
+    const isNewAddressFilled = newAddress.firstname && newAddress.address1 && newAddress.city && newAddress.postcode;
+    
+    if (selectedAddress || isNewAddressFilled) {
+      if (isNewAddressFilled) {
         try {
           const addressPayload = {
             id_customer: customer.id,
             id_country: 8,
+            alias: 'Mon adresse',
             firstname: newAddress.firstname,
             lastname: newAddress.lastname || personalInfo.lastname,
             address1: newAddress.address1,
             address2: '',
             city: newAddress.city,
             postcode: newAddress.postcode,
-            phone: '',
-            phone_mobile: '',
+            phone: newAddress.phone,
+            phone_mobile: newAddress.phone,
             other: '',
             active: 1
           };
@@ -363,15 +367,27 @@ const CheckoutPage = () => {
                       placeholder="Nom"
                     />
                   </div>
-                  <div className="form-group">
-                    <label>Adresse</label>
-                    <input
-                      type="text"
-                      value={newAddress.address1}
-                      onChange={(e) => setNewAddress({ ...newAddress, address1: e.target.value })}
-                      placeholder="Rue, numéro"
-                    />
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Adresse</label>
+                      <input
+                        type="text"
+                        value={newAddress.address1}
+                        onChange={(e) => setNewAddress({ ...newAddress, address1: e.target.value })}
+                        placeholder="Rue, numéro"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Contact</label>
+                      <input
+                        type="text"
+                        value={newAddress.phone}
+                        onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
+                        placeholder="+XXX XX XXX XX"
+                      />
+                    </div>
                   </div>
+                  
                   <div className="form-row">
                     <div className="form-group">
                       <label>Code postal</label>
