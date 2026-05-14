@@ -4,7 +4,7 @@ import Header from '../../../components/layout/Header';
 import CommandeStep from '../../../components/checkout/CommandeStep';
 import { localCartService } from '../../../service/Cart';
 import { cartService } from '../../../service/cartService';
-import { getCustomerById } from '../../../service/Customer';
+import { customerService } from '../../../service/Customer';
 import { getAddressesByCustomerId, createAddress } from '../../../service/Addresse';
 import { commandeService } from '../../../service/Commande';
 import './CheckoutPage.css';
@@ -65,7 +65,7 @@ const CheckoutPage = () => {
         setCustomer(currentUser);
         setCart(cartItems);
 
-        const custData = await getCustomerById(currentUser.id);
+        const custData = await customerService.getCustomerById(currentUser.id);
         setCustomerData(custData);
 
         const getTextVal = (val) => {

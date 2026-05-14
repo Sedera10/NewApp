@@ -6,6 +6,7 @@ import './App.css'
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import HomePage from './pages/frontoffice/home/HomePage'
+import ProductsPage from './pages/frontoffice/product/ProductsPage'
 import ProductDetails from './pages/frontoffice/product/ProductDetails'
 import CartPage from './pages/frontoffice/cart/CartPage'
 import CheckoutPage from './pages/frontoffice/checkout/CheckoutPage'
@@ -16,6 +17,7 @@ import ImportPage from './pages/backoffice/import/ImportPage'
 import LogOut from './pages/backoffice/login/LogOut'
 import ResetDataPage from './pages/backoffice/reset/ResetDataPage'
 import CommandePageAdmin from './pages/backoffice/commande/Commande'
+import Dashboard from './pages/backoffice/dashboard/Dashboard'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import Layout from './pages/backoffice/layout/Layout'
 
@@ -26,7 +28,8 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to="/mystore/fr" replace/>} />
-        <Route path="/mystore/fr"element={<HomePage />} />
+        <Route path="/mystore/fr" element={<HomePage />} />
+        <Route path="/mystore/fr/products" element={<ProductsPage />} />
         <Route path="/mystore/fr/product/:id" element={<ProductDetails />} />
         <Route path="/mystore/fr/cart" element={<CartPage />} />
         <Route path="/mystore/fr/checkout" element={<CheckoutPage />} />
@@ -47,9 +50,18 @@ function App() {
           />
           <Route
             path="/mystore/admin/import"
-            index element={
+            element={
               <ProtectedRoute>
                 <ImportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mystore/admin/dashboard"
+            index
+            element={
+              <ProtectedRoute>
+                <Dashboard />
               </ProtectedRoute>
             }
           />

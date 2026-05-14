@@ -11,7 +11,8 @@ const ProductCard = ({ product }) => {
       <div className="image-container">
         {/* Badges */}
         <div className="badges">
-          {product.isNew && <span className="badge badge-new">Nouveau</span>}
+          {product.marker && <span className={`badge badge-${product.marker.toLowerCase()}`}>{product.marker}</span>}
+          {!product.marker && product.isNew && <span className="badge badge-new">NEW</span>}
           {product.discount && <span className="badge badge-discount">-{product.discount}%</span>}
         </div>
         

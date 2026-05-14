@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { 
   MdCloudUpload, 
   MdWarning,
+  MdDashboard,
   MdSettings, 
   MdKeyboardCommandKey
 } from 'react-icons/md';
@@ -23,8 +24,21 @@ export default function Sidebar({ isOpen }) {
       {/* Menu de navigation */}
       <div className="sidebar-nav w-100 px-3">
         <ul className="nav flex-column w-100">
-          
+
           <li className="nav-item">
+            <h6 className="ps-4 ms-2 text-uppercase text-xs font-weight-bolder opacity-5 mt-2">Vue d'ensemble</h6>
+          </li>
+
+          <li className="nav-item">
+            <NavLink to="/mystore/admin/dashboard" className="nav-link text-dark d-flex align-items-center mb-1">
+              <div className="icon-box me-3 d-flex align-items-center justify-content-center">
+                <MdDashboard size={20} />
+              </div>
+              <span>Tableau de bord</span>
+            </NavLink>
+          </li>
+          
+          <li className="nav-item mt-3">
             <h6 className="ps-4 ms-2 text-uppercase text-xs font-weight-bolder opacity-5 mt-2">Configurations</h6>
           </li>
 

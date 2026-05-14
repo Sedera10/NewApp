@@ -49,6 +49,10 @@
   background-color: var(--color-accent-new);
 }
 
+.badge-hot {
+  background-color: #ff4757;
+}
+
 .badge-discount {
   background-color: var(--color-accent-discount);
   color: var(--color-text-dark); /* Plus lisible sur le jaune */

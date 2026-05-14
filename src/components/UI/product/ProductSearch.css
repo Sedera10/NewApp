@@ -1,0 +1,159 @@
+.product-search-container {
+  padding: 24px;
+  background-color: white;
+  border-radius: var(--border-radius, 12px);
+  box-shadow: var(--shadow-sm, 0 2px 10px rgba(0,0,0,0.05));
+  margin: 20px auto;
+  max-width: 1200px;
+  border: 1px solid var(--color-border, #eee);
+}
+
+.product-search-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+}
+
+.search-field-group {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 200px;
+}
+
+.category-group {
+  flex: 2; /* takes more space if possible */
+  min-width: 300px;
+}
+
+.search-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-dark, #333);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.search-input {
+  padding: 10px 14px;
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: 6px;
+  background-color: #fbfbfb;
+  font-size: 14px;
+  transition: border-color 0.2s;
+  color: var(--color-text-dark, #333);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #3d4a41);
+  background-color: white;
+}
+
+/* Category structural styles */
+.custom-categories-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dropdown {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 12px;
+  margin-bottom: -12px;
+}
+
+.dropdown-btn {
+  padding: 10px 16px;
+  background-color: #fbfbfb;
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--color-text-dark, #333);
+  transition: all 0.2s ease;
+}
+
+.dropdown-btn:hover {
+  background-color: #f0f0f0;
+}
+
+.dropdown-btn.active-cat {
+  background-color: var(--color-primary, #3d4a41);
+  color: white;
+  border-color: var(--color-primary, #3d4a41);
+}
+
+.dropdown-content {
+  display: block; /* Managed by JS for hovering */
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: white;
+  min-width: 160px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  border-radius: 6px;
+  z-index: 10;
+  border: 1px solid var(--color-border, #eee);
+  overflow: hidden;
+}
+
+/* Invisible bridge removed as dropdown padding handles hover zone */
+
+.dropdown-content a {
+  color: var(--color-text-dark, #333);
+  padding: 10px 16px;
+  text-decoration: none;
+  display: block;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.dropdown-content a:hover,
+.dropdown-content a.active-child {
+  background-color: var(--color-secondary, #f8f9fa);
+  color: var(--color-primary, #3d4a41);
+  font-weight: 500;
+}
+
+/* Prices */
+.price-inputs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.price-inputs .search-input {
+  width: 100px;
+  flex: 1;
+}
+
+.price-separator {
+  color: #888;
+  font-weight: bold;
+}
+
+.search-action-group {
+  display: flex;
+  margin-bottom: 2px;
+}
+
+.search-submit-btn {
+  padding: 11px 24px;
+  background-color: var(--color-primary, #3d4a41);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+  height: 42px; /* aligns with inputs */
+}
+
+.search-submit-btn:hover {
+  opacity: 0.9;
+}

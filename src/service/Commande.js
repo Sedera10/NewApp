@@ -1,6 +1,6 @@
 import api from "./api";
 import { xmlToJson, jsonToXml, buildPrestashopXml } from "./Util";
-import { getCustomerById } from "./Customer";
+import { customerService } from "./Customer";
 import { getAddresseById } from "./Addresse";
 
 const getTextVal = (val) => {
@@ -27,7 +27,7 @@ export const commandeService = {
       let customerName = `Client #${idCustomer}`;
       try {
         if (idCustomer && idCustomer !== '0') {
-          const customer = await getCustomerById(idCustomer);
+          const customer = await customerService.getCustomerById(idCustomer);
           customerName = `${customer.firstname} ${customer.lastname}`;
         }
       } catch (err) { }
@@ -211,7 +211,7 @@ export const commandeService = {
   CustomName: async (idCustomer) => {
       try {
           const id = getTextVal(idCustomer);
-          const customer = await getCustomerById(id);
+          const customer = await customerService.getCustomerById(id);
           return `${customer.firstname} ${customer.lastname}`;
       } catch (error) {
           return `Client #${idCustomer}`;

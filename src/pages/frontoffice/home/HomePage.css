@@ -1,0 +1,114 @@
+.user-selection-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-body, #f0f2f5);
+  padding: 20px;
+}
+
+.user-selection-card {
+  background: var(--color-white, white);
+  padding: 40px 30px;
+  border-radius: var(--border-radius, 12px);
+  box-shadow: var(--shadow-md, 0 4px 15px rgba(0,0,0,0.1));
+  width: 100%;
+  max-width: 800px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Bandeau décoratif en haut de la carte inspiré du thème */
+.user-selection-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 8px;
+  background: var(--primary-gradient, linear-gradient(195deg, #829a89, #3d4a41));
+}
+
+.user-selection-card h2 {
+  text-align: center;
+  margin-bottom: 30px;
+  color: var(--color-primary, #3d4a41);
+  font-weight: 600;
+  font-size: 1.8rem;
+}
+
+.users-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.user-card {
+  display: flex;
+  align-items: center;
+  padding: 15px;
+  border: 1px solid var(--color-border, #eee);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background-color: var(--color-white, white);
+}
+
+.user-card:hover {
+  border-color: #829a89;
+  box-shadow: 0 4px 12px rgba(61, 74, 65, 0.15);
+  transform: translateY(-3px);
+}
+
+.anonymous-card {
+  background-color: var(--color-secondary, #f8f9fa);
+  border: 1.5px dashed #829a89;
+}
+
+.anonymous-card:hover {
+  background-color: #e2e8e4;
+  border-color: var(--color-primary, #3d4a41);
+}
+
+.user-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: var(--color-secondary, #e9ecef);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 15px;
+  overflow: hidden;
+}
+
+.user-profile-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-info strong {
+  font-size: 1.05rem;
+  color: var(--color-text-dark, #1a1a1a);
+  font-weight: 500;
+}
+
+.user-info span {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #666);
+}
+
+.user-selection-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 1.2rem;
+  color: var(--color-primary, #3d4a41);
+}

@@ -1,7 +1,7 @@
 import api from "./api";
 import { xmlToJson, buildPrestashopXml } from "./Util";
 import { productService } from "./Product";
-import { getCustomerById } from "./Customer";
+import { customerService } from "./Customer";
 
 const getTextVal = (val) => {
     if (val && typeof val === 'object' && val['#text'] !== undefined) {
@@ -54,7 +54,7 @@ export const cartService = {
         let customerName = `Client #${idCustomer}`;
         try {
             if (idCustomer !== '0') {
-                const customer = await getCustomerById(idCustomer);
+                const customer = await customerService.getCustomerById(idCustomer);
                 customerName = `${customer.firstname} ${customer.lastname}`;
             } else {
                 customerName = "Visiteur (Non connecté)";
