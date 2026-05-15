@@ -2,7 +2,8 @@
 import axios from 'axios';
 import { xmlToJson } from './Util';
 
-const API_KEY = '7V798TDQKI1Q1S988IE2HKVR6EXA2Z4B';
+const API_KEY = '	7V798TDQKI1Q1S988IE2HKVR6EXA2Z4B';
+// const API_KEY = 'VMSAS9H1RSPCGH7E3IYRIZP8D6LMBBTN'; --- 1er instance ---
 const BASE_URL = '/prestashop/api';
 
 const api = axios.create({
