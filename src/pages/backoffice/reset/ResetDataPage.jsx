@@ -1,95 +1,87 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { MdCheckCircle, MdWarning } from 'react-icons/md';
 import ConfirmDialog from '../../../components/UI/others/ConfirmDialog';
-import { resetAllData } from '../../../service/resetService';
+import { resetAllData, getResourcesToWipe } from '../../../service/resetService';
+import Header from '../../../components/layout/Header';
+import './ResetDataPage.css';
 
 export default function ResetDataPage() {
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isLoading, setLoading] = useState(false);
-    
-    // Etat pour le suivi de chaque table
-    const [tables, setTables] = useState([
-        { name: 'categories', status: 'idle' },
-        { name: 'products', status: 'idle' },
-        { name: 'users', status: 'idle' }
-    ]);
+    const [tables, setTables] = useState([]);
+    const [progress, setProgress] = useState(0);
+
+    useEffect(() => {
+        const resources = getResourcesToWipe();
+        setTables(resources.map(res => ({ name: res, status: 'idle' })));
+    }, []);
 
     const handleConfirm = async () => {
         setLoading(true);
         setConfirmOpen(false);
+        setProgress(0);
 
         let currentTables = [...tables];
-        // Réinitialiser les statuts avant de démarrer
         currentTables = currentTables.map(t => ({ ...t, status: 'idle' }));
-        
-        for (let i = 0; i < currentTables.length; i++) {
-            currentTables[i].status = 'loading';
-            setTables([...currentTables]);
+        setTables(currentTables);
 
-            try {
-                // Utilisation de la méthode spécifique item-par-item de notre service
-                await resetAllData();
-                currentTables[i].status = 'done';
-            } catch (err) {
-                console.error(err);
-                currentTables[i].status = 'error';
+        const total = currentTables.length;
+
+        await resetAllData((resourceName, status, completedCount) => {
+            setTables(prev => prev.map(t => 
+                t.name === resourceName ? { ...t, status } : t
+            ));
+            
+            if (status === 'done' || status === 'error') {
+                const newProgress = Math.round((completedCount / total) * 100);
+                setProgress(newProgress);
             }
+        });
 
-            setTables([...currentTables]);
-        }
         setLoading(false);
     };
 
     return (
-        <div className="container-fluid py-4">
-            <h1 className="text-start mb-5 text-dark fw-bold" style={{ textAlign: "right" }}>Réinitialisation (Test)</h1>
-            
-            <div className="row justify-content-center">
-                <div className="col-12 col-md-8 col-lg-6">
-                    <div className="card shadow-sm border-0 bg-white" style={{ borderRadius: '12px' }}>
-                        <div className="card-body p-5 text-center">
-                            
-                            <div className="mb-4">
-                                <MdWarning size={60} className="text-danger mb-3" />
-                                <h4 className="fw-bold">Purge de la base de données</h4>
-                                <p className="text-muted">
-                                    Attention, cette action est irréversible. Cette interface permet de purger complètement les données via un backend de test Node.js / MySQL. 
-                                </p>
+        <div className="reset-page-container">
+            <h1 className="h2 mb-0">Reset data</h1>
+            <div className="reset-content">
+                <div className="reset-card">
+                    <MdWarning size={70} className="warning-icon" />
+                    <h2>Purge de la base de données</h2>
+                    <p className="reset-description">
+                        Attention, cette action est irréversible. Toutes les données seront supprimées définitivement de la base de données. 
+                        Veuillez confirmer cette action uniquement si vous êtes sûr.
+                    </p>
+
+                    <button 
+                        className="reset-btn"
+                        onClick={() => setConfirmOpen(true)}
+                        disabled={isLoading || tables.length === 0}
+                    >
+                        {isLoading ? 'RÉINITIALISATION EN COURS...' : 'RÉINITIALISER LES DONNÉES'}
+                    </button>
+
+                    {(isLoading || progress > 0) && (
+                        <div className="progress-section">
+                            <div className="progress-bar-container">
+                                <div className="progress-bar-fill" style={{ width: `${progress}%` }}></div>
+                                <span className="progress-text">{progress}%</span>
                             </div>
 
-                            <button 
-                                className="btn btn-danger btn-lg w-100 fw-bold shadow-sm mb-4" 
-                                style={{ borderRadius: '8px' }}
-                                onClick={() => setConfirmOpen(true)}
-                                disabled={isLoading}
-                            >
-                                RESET DATA
-                            </button>
-
-                            {/* Détails du chargement ligne par ligne */}
-                            {tables.some(t => t.status !== 'idle') && (
-                                <div className="bg-light p-3 rounded text-start">
-                                    <h6 className="mb-3 text-secondary text-center">Progression :</h6>
-                                    <ul className="list-group list-group-flush bg-transparent">
-                                        {tables.map(table => (
-                                            <li key={table.name} className="list-group-item bg-transparent d-flex justify-content-between align-items-center border-0 px-0 py-2">
-                                                <span style={{ 
-                                                    textDecoration: table.status === 'done' ? 'line-through' : 'none',
-                                                    color: table.status === 'done' ? '#6c757d' : 'inherit'
-                                                }}>
-                                                    reset data from "{table.name}"
-                                                </span>
-                                                
-                                                {table.status === 'loading' && <span className="spinner-border spinner-border-sm text-primary"></span>}
-                                                {table.status === 'done' && <MdCheckCircle className="text-success" size={20} />}
-                                                {table.status === 'error' && <span className="text-danger fw-bold small">Erreur</span>}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
+                            <ul className="tables-list">
+                                {tables.map(table => (
+                                    <li key={table.name} className={`table-item ${table.status}`}>
+                                        <span className="table-name">{table.name}</span>
+                                        <div className="status-icon">
+                                            {table.status === 'loading' && <span className="spinner"></span>}
+                                            {table.status === 'done' && <MdCheckCircle className="check-icon" size={24} />}
+                                            {table.status === 'error' && <span className="error-text">Erreur</span>}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
 
