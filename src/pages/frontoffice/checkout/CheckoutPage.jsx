@@ -237,7 +237,7 @@ const CheckoutPage = () => {
       console.log('Order created:', createdOrder);
 
       localCartService.clearCart(customer.id);
-      navigate('/mystore/fr', {
+      navigate('/mystore/fr/products', {
         state: { orderSuccess: true, orderId: getTextVal(createdOrder?.id) }
       });
     } catch (error) {

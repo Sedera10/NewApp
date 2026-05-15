@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './Dashboard.css';
 import { commandeService } from '../../../service/Commande';
+import StatCard from '../../../components/UI/others/StatCard'
 
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
@@ -31,7 +32,7 @@ const Dashboard = () => {
         // Process orders
         orders.forEach(order => {
           totalCmd++;
-          const amount = parseFloat(getTextVal(order.total_paid_tax_incl) || 0);
+          const amount = parseFloat(getTextVal(order.total_paid) || 0);
           totalAmt += amount;
 
           // Group by Date 
@@ -83,16 +84,8 @@ const Dashboard = () => {
       
       {/* Statistiques globales */}
       <div className="dashboard-summary">
-        <div className="stat-card">
-          <div className="stat-header">Total Général</div>
-          <div className="stat-value">{stats.totalCommandes}</div>
-          <div className="stat-desc">Commandes totales</div>
-        </div>
-        <div className="stat-card highlight">
-          <div className="stat-header">Montant Total</div>
-          <div className="stat-value">{stats.totalMontant.toFixed(2)} €</div>
-          <div className="stat-desc">Chiffre d'affaires global</div>
-        </div>
+        <StatCard title="Total Général" amount={stats.totalCommandes} footerText="Commandes totales"/>
+        <StatCard title="Montant Total" amount={stats.totalMontant} footerText="Chiffre d'affaires global"/>
       </div>
 
       {/* Statistiques par jour */}
