@@ -54,25 +54,6 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
 
             {/* Menu & Recherche */}
             <div className="search-nav-container">
-              <div className="dropdown">
-                <button className="dropdown-btn">
-                  Vêtements
-                </button>
-                <div className="dropdown-content">
-                  <a href="#">Homme</a>
-                  <a href="#">Femme</a>
-                </div>
-              </div>
-              <div className="dropdown">
-                <button className="dropdown-btn">
-                  Accessoires
-                </button>
-                <div className="dropdown-content">
-                  <a href="#">Papeterie</a>
-                  <a href="#">Accessoires de maison</a>
-                </div>
-              </div>
-
               <div className="search-bar">
                 <input type="text" placeholder="Rechercher un produit..." />
                 <button className="search-btn"><Search size={18} /></button>

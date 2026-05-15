@@ -1,27 +1,34 @@
 import api from './api';
-import axios from 'axios';
 
-// Utilisation du backend de test local (port 5000)
-const BASE_URL = 'http://localhost:5000/api/reset';
-const apiTest = axios.create({
-  baseURL: BASE_URL
-});
+const resourcesLigne = import.meta.env.VITE_RESOURCES_TO_WIPE || "";
+const resourcesToWipe = resourcesLigne.split(',').filter(res => res !== "");
 
-export const resetTable = async (tableName) => {
-    const response = await apiTest.get(`/tables/${tableName}`);
-    const lignes = response.data;
-    for (const ligne of lignes) {
-        await apiTest.delete(`/${tableName}/${ligne.id}`);
+export async function resetAllData() {
+    for (const resource of resourcesToWipe) {
+      console.log(resource);
+        // const getRes = await api.get(`/${resource}?display=[id]&output_format=JSON`);
+        // const data = await getRes.json();
+        
+        // let idArray = [];
+        // if (data[resource]) {
+        //     idArray = data[resource].map(item => item.id);
+        // }
+
+        // if (idArray.length > 0) {
+        //     // Protection de la Base Catalogue
+        //     if (resource === 'categories') {
+        //         idArray = idArray.filter(id => parseInt(id) > 2);
+        //     }
+        //     if (resource === 'addresses') {
+        //         idArray = idArray.filter(id => parseInt(id) != 3 && parseInt(id) != 4 && parseInt(id) != 6);
+        //     }
+        //     if (idArray.length === 0) continue;
+            
+        //     const idsString = `[${idArray.join(',')}]`;
+        //     await fetch(`/api/${resource}/${idsString}?ws_key=${wsKey}`, {
+        //         method: 'DELETE'
+        //     });
+        //     console.log(`${resource} vidée.`);
+        // }
     }
-};
-
-export const resetData = async (tablesArray) => {
-  try {
-    for (const tableName of tablesArray) {
-        await resetTable(tableName);
-    }
-  } catch (error) {
-    console.error("Erreur pendant la suppression :", error);
-    throw error;
-  }
-};
+}

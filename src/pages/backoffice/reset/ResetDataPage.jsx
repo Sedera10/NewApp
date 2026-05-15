@@ -1,7 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { MdCheckCircle, MdWarning } from 'react-icons/md';
 import ConfirmDialog from '../../../components/UI/others/ConfirmDialog';
-import { resetTable } from '../../../service/resetService';
+import { resetAllData } from '../../../service/resetService';
 
 export default function ResetDataPage() {
     const [isConfirmOpen, setConfirmOpen] = useState(false);
@@ -28,7 +28,7 @@ export default function ResetDataPage() {
 
             try {
                 // Utilisation de la méthode spécifique item-par-item de notre service
-                await resetTable(currentTables[i].name);
+                await resetAllData();
                 currentTables[i].status = 'done';
             } catch (err) {
                 console.error(err);
