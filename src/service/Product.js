@@ -121,15 +121,20 @@ export const productService = {
     // /api/images/products/{id}/{id_default_image}/
     const image = defaultImageId ? `${api.defaults.baseURL}/images/products/${id}/${defaultImageId}/?ws_key=${api.defaults.params.ws_key}` : 'https://picsum.photos/300';
 
-    const rawDateAvailability = getText(p.available_date) || getText(p.date_add) || getText(p.date_upd);
+    const rawDateAvailability = (getText(p.available_date) !== '0000-00-00' && getText(p.available_date) !== '0000-00-00 00:00:00') ? getText(p.available_date) : getText(p.date_add);
     let marker = null;
-    let isNew = false;
+    let isNew = getText(p.condition) === 'new';
     
-    if (rawDateAvailability && rawDateAvailability !== '0000-00-00 00:00:00') {
+    if (rawDateAvailability) {
       const parsedDate = new Date(rawDateAvailability);
       const now = new Date();
-      const diffMs = now - parsedDate;
-      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      // On utilise Math.abs au cas où la date est dans le futur (ex: pré-commandes)
+      const diffMs = Math.abs(now - parsedDate);
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      
+      console.log(`parsedDate: ${parsedDate}, Diff Jours: ${diffDays}`);
+      isNew = false
+      
       if (diffDays <= 1) {
         marker = 'HOT';
         isNew = true;
@@ -137,8 +142,6 @@ export const productService = {
         marker = 'NEW';
         isNew = true;
       }
-    } else {
-      isNew = getText(p.condition) === 'new';
     }
 
     return {
