@@ -1,20 +1,17 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import { useState } from 'react';
 import { MdCheckCircle, MdWarning } from 'react-icons/md';
 import ConfirmDialog from '../../../components/UI/others/ConfirmDialog';
 import { resetAllData, getResourcesToWipe } from '../../../service/resetService';
-import Header from '../../../components/layout/Header';
 import './ResetDataPage.css';
 
 export default function ResetDataPage() {
     const [isConfirmOpen, setConfirmOpen] = useState(false);
     const [isLoading, setLoading] = useState(false);
-    const [tables, setTables] = useState([]);
-    const [progress, setProgress] = useState(0);
-
-    useEffect(() => {
+    const [tables, setTables] = useState(() => {
         const resources = getResourcesToWipe();
-        setTables(resources.map(res => ({ name: res, status: 'idle' })));
-    }, []);
+        return resources.map(res => ({ name: res, status: 'idle', deletedCount: null }));
+    });
+    const [progress, setProgress] = useState(0);
 
     const handleConfirm = async () => {
         setLoading(true);
@@ -22,14 +19,14 @@ export default function ResetDataPage() {
         setProgress(0);
 
         let currentTables = [...tables];
-        currentTables = currentTables.map(t => ({ ...t, status: 'idle' }));
+        currentTables = currentTables.map(t => ({ ...t, status: 'idle', deletedCount: null }));
         setTables(currentTables);
 
         const total = currentTables.length;
 
-        await resetAllData((resourceName, status, completedCount) => {
+        await resetAllData((resourceName, status, completedCount, meta = {}) => {
             setTables(prev => prev.map(t => 
-                t.name === resourceName ? { ...t, status } : t
+                t.name === resourceName ? { ...t, status, deletedCount: meta.deletedCount ?? t.deletedCount } : t
             ));
             
             if (status === 'done' || status === 'error') {
@@ -71,7 +68,12 @@ export default function ResetDataPage() {
                             <ul className="tables-list">
                                 {tables.map(table => (
                                     <li key={table.name} className={`table-item ${table.status}`}>
-                                        <span className="table-name">{table.name}</span>
+                                        <span className="table-name">
+                                            {table.name}
+                                            {table.deletedCount !== null && (
+                                                <span className="table-count">{table.deletedCount} supprimé{table.deletedCount > 1 ? 's' : ''}</span>
+                                            )}
+                                        </span>
                                         <div className="status-icon">
                                             {table.status === 'loading' && <span className="spinner"></span>}
                                             {table.status === 'done' && <MdCheckCircle className="check-icon" size={24} />}
