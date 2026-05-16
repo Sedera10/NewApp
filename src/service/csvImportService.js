@@ -1,6 +1,46 @@
 import Papa from 'papaparse';
-import prestashopApi from './prestashopApi';
+import api from './api';
+import { xmlToJson } from './Util';
 import { buildCategoryXML, buildTaxXML, buildTaxRulesGroupXML, buildTaxRuleXML, buildProductXML } from './xml/importXmlBuilder';
+
+// Implémentation locale de prestashopApi en utilisant votre api.js et xmlToJson
+const prestashopApi = {
+  createResource: async (resource, xml) => {
+    const response = await api.post(`/${resource}`, xml);
+    const jsonObj = xmlToJson(response.data);
+    return jsonObj.prestashop;
+  },
+  updateResource: async (resource, id, xml) => {
+    const response = await api.put(`/${resource}/${id}`, xml);
+    const jsonObj = xmlToJson(response.data);
+    return jsonObj.prestashop;
+  },
+  getResources: async (resource, id = null, filter = null, params = {}) => {
+    let url = `/${resource}`;
+    if (id) {
+      url += `/${id}`;
+    }
+    const response = await api.get(url, { params });
+    const jsonObj = xmlToJson(response.data);
+    
+    if (id) {
+      const key = Object.keys(jsonObj.prestashop).find(k => k !== 'xmlns' && k !== 'xlink');
+      return [jsonObj.prestashop[key]]; 
+    }
+    
+    const resourceKey = Object.keys(jsonObj.prestashop).find(k => k !== 'xmlns' && k !== 'xlink');
+    if (!resourceKey) return [];
+    
+    const itemsGroup = jsonObj.prestashop[resourceKey];
+    if (!itemsGroup) return [];
+    
+    const itemKey = Object.keys(itemsGroup)[0];
+    if (!itemKey) return [];
+    
+    const items = itemsGroup[itemKey];
+    return Array.isArray(items) ? items : [items];
+  }
+};
 import { buildOrderXML, buildOrderStateXML, buildOrderRowXML, buildOrderHistoryXML } from './xml/ordersXmlBuilder';
 import { buildCartXML } from './xml/cartsXmlBuilder';
 import { buildOrderDetailXML, buildOrderPaymentXML } from './xml/orderDetailsXmlBuilder';
@@ -1497,46 +1537,25 @@ const uploadProductImage = async (productId, file) => {
   formData.append('image', file, file.name);
 
   try {
-    const response = await fetch(`/api/images/products/${productId}`, {
-      method: 'POST',
+    const response = await api.post(`/images/products/${productId}`, formData, {
       headers: {
-        'Authorization': `Basic ${btoa(
-          (import.meta.env.VITE_PRESTASHOP_API_KEY || '') + ':'
-        )}`
-      },
-      body: formData
+        'Content-Type': 'multipart/form-data'
+      }
     });
 
-    if (!response.ok) {
-      const contentType = response.headers.get('content-type');
-      let errorText = `HTTP ${response.status}`;
-      
-      if (contentType?.includes('application/json')) {
-        try {
-          const errorData = await response.json();
-          errorText = errorData.message || errorData.error || errorText;
-        } catch {
-          errorText = await response.text();
-        }
-      } else {
-        errorText = await response.text();
-      }
-
-      throw new Error(`Upload échoué: ${errorText}`);
-    }
-
-    // Gérer les réponses XML ou JSON
-    const contentType = response.headers.get('content-type');
-    if (contentType?.includes('application/json')) {
-      return await response.json();
+    const contentType = response.headers['content-type'] || '';
+    if (contentType.includes('application/json')) {
+      return response.data;
     } else {
-      // La plupart des réponses PrestaShop sont en XML, retourner le texte
-      return await response.text();
+      return response.data;
     }
   } catch (error) {
-    if (error instanceof TypeError) {
-      throw new Error(`Erreur réseau: ${error.message}`, error);
+    let errorText = `HTTP Exception`;
+    if (error.response) {
+      errorText = `HTTP ${error.response.status} - ${typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data)}`;
+    } else {
+      errorText = error.message;
     }
-    throw error;
+    throw new Error(`Upload échoué: ${errorText}`);
   }
 };

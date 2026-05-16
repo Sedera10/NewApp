@@ -34,7 +34,7 @@ export const buildCustomerXML = (customerData, idLang = 1) => {
     <lastname><![CDATA[${lastname}]]></lastname>
     <email><![CDATA[${email}]]></email>
     <passwd><![CDATA[${passwd}]]></passwd>
-    <id_default_group>1</id_default_group>
+    <id_default_group>3</id_default_group>
     <id_lang>${idLang}</id_lang>
     <newsletter>0</newsletter>
     <optin>0</optin>

@@ -1,42 +1,74 @@
 ﻿import React, { useState } from 'react';
-import { MdCloudUpload, MdFileUpload, MdFolderZip } from 'react-icons/md';
+import { MdCloudUpload, MdFileUpload, MdFolderZip, MdImage } from 'react-icons/md';
+import { importFile1, importFile2, importFile3, importFile4 } from '../../../service/csvImportService';
 
 export default function ImportPage() {
     const [csvFiles, setCsvFiles] = useState([]);
-    const [zipFile, setZipFile] = useState(null);
+    const [imageFiles, setImageFiles] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [progressMsg, setProgressMsg] = useState('');
 
     const handleCsvChange = (e) => {
-        setCsvFiles(Array.from(e.target.files));
+        // Trier les fichiers par nom pour s'assurer que c'est dans l'ordre de traitement
+        // ou vous pouvez vous fier à l'ordre de sélection
+        const selectedFiles = Array.from(e.target.files).sort((a, b) => a.name.localeCompare(b.name));
+        setCsvFiles(selectedFiles);
     };
 
-    const handleZipChange = (e) => {
-        setZipFile(e.target.files[0] || null);
+    const handleImageChange = (e) => {
+        setImageFiles(Array.from(e.target.files));
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (csvFiles.length === 0 && !zipFile) {
+        if (csvFiles.length === 0 && imageFiles.length === 0) {
             alert("Veuillez sélectionner au moins un fichier à importer.");
             return;
         }
 
         setIsLoading(true);
-        // Simulation d'un upload avec FormData plus tard : 
-        // const formData = new FormData();
-        // csvFiles.forEach(f => formData.append('csvFiles', f));
-        // if(zipFile) formData.append('zipFile', zipFile);
-        
-        setTimeout(() => {
-            setIsLoading(false);
-            alert("Fichiers importés avec succès ! (Simulation terminée)");
+        setProgressMsg('Démarrage de l\'import...');
+
+        try {
+            let file1Results = null;
+            let file2Results = null;
+
+            // Fichier 1 : Produits et Catégories
+            if (csvFiles.length > 0) {
+                file1Results = await importFile1(csvFiles[0], (progress) => setProgressMsg(`(1/4) ${progress.message}`));
+            }
+
+            // Fichier 2 : Variantes et Stock (Nécessite Fichier 1)
+            if (csvFiles.length > 1 && file1Results) {
+                file2Results = await importFile2(csvFiles[1], file1Results, (progress) => setProgressMsg(`(2/4) ${progress.message}`));
+            }
+
+            // Fichier 3 : Commandes et Clients (Nécessite Fichier 1 et 2)
+            if (csvFiles.length > 2 && file1Results && file2Results) {
+                await importFile3(csvFiles[2], file1Results, file2Results, (progress) => setProgressMsg(`(3/4) ${progress.message}`));
+            }
+
+            // Images : Fichier 4 (Nécessite les résultats du fichier 1)
+            if (imageFiles.length > 0 && file1Results) {
+                setProgressMsg('(4/4) Importation des images...');
+                await importFile4(imageFiles, file1Results, (progress) => setProgressMsg(`(4/4) ${progress.message}`));
+            }
+
+            alert("Fichiers importés avec succès !");
             setCsvFiles([]);
-            setZipFile(null);
-            // Réinitialiser les inputs :
+            setImageFiles([]);
             document.querySelector('#csvInput').value = '';
-            document.querySelector('#zipInput').value = '';
-        }, 2000);
+            const imgInput = document.querySelector('#imageInput');
+            if (imgInput) imgInput.value = '';
+
+        } catch (error) {
+            console.error("Erreur d'import", error);
+            alert("Une erreur s'est produite lors de l'import : " + error.message);
+        } finally {
+            setIsLoading(false);
+            setProgressMsg('');
+        }
     };
 
     return (
@@ -83,24 +115,25 @@ export default function ImportPage() {
                                 {/* Séparateur */}
                                 <hr className="my-5 opacity-25" />
 
-                                {/* Section ZIP */}
+                                {/* Section Images */}
                                 <h5 className="mb-3 text-secondary d-flex align-items-center justify-content-center">
-                                    <MdFolderZip className="me-2" size={24} /> Archive d'images (.zip)
+                                    <MdImage className="me-2" size={24} /> Images des produits (.jpg, .png)
                                 </h5>
                                 <div className="mb-5 p-4 border rounded bg-light shadow-sm text-center">
                                     <p className="small text-secondary mb-3">
-                                        Importez un fichier ZIP contenant l'ensemble des images associées à votre catalogue.
+                                        Importez plusieurs images. Le nom de chaque image doit correspondre à la référence du produit.
                                     </p>
                                     <input 
-                                        id="zipInput"
+                                        id="imageInput"
                                         type="file" 
                                         className="form-control" 
-                                        accept=".zip" 
-                                        onChange={handleZipChange}
+                                        accept=".png,.jpg,.jpeg" 
+                                        multiple
+                                        onChange={handleImageChange}
                                     />
-                                    {zipFile && (
+                                    {imageFiles.length > 0 && (
                                         <div className="mt-2 fw-bold small text-primary">
-                                            Fichier sélectionné : {zipFile.name}
+                                            {imageFiles.length} image(s) sélectionnée(s)
                                         </div>
                                     )}
                                 </div>
@@ -114,7 +147,7 @@ export default function ImportPage() {
                                         disabled={isLoading}
                                     >
                                         {isLoading ? (
-                                            <><span className="spinner-border spinner-border-sm me-2"></span> IMPORTATION EN COURS...</>
+                                            <><span className="spinner-border spinner-border-sm me-2"></span> {progressMsg || 'IMPORTATION EN COURS...'}</>
                                         ) : (
                                             "TRAITER ET IMPORTER LES DONNÉES"
                                         )}
