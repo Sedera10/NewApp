@@ -118,7 +118,8 @@ export async function resetAllData(onProgress) {
             if (onProgress) onProgress(resource, 'done', completed, { deletedCount: deletedCount ?? 0 });
         } catch (error) {
             console.error(error);
-            if (onProgress) onProgress(resource, 'error', completed);
+            completed++;
+            if (onProgress) onProgress(resource, 'error', completed, { deletedCount: 0 });
         }
     }
 }
