@@ -46,9 +46,7 @@ export const buildOrderXML = (orderData) => {
   const totalProducts = parseFloat(orderData.total_products) || 0;
   const totalProductsWT = parseFloat(orderData.total_products_wt) || totalPaid;
   const secureKey = ensureMd5Like(orderData.secure_key);
-  const orderRows = Array.isArray(orderData.order_rows) ? orderData.order_rows : [];
 
-  const rowNodes = (orderRows.length ? orderRows : []).map(buildOrderRowXML).join('\n');
   const currentStateNode = orderData.current_state !== undefined && orderData.current_state !== null && String(orderData.current_state).trim() !== ''
     ? `    <current_state><![CDATA[${orderData.current_state}]]></current_state>\n`
     : '';
@@ -56,6 +54,8 @@ export const buildOrderXML = (orderData) => {
     ? `    <id><![CDATA[${orderId}]]></id>\n`
     : '';
 
+  // IMPORTANT: Les order_rows ne doivent PAS être incluses lors de la création
+  // PrestaShop créé automatiquement les order_rows à partir du panier (id_cart)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
   <order>
@@ -104,11 +104,6 @@ ${idNode}    <id_address_delivery><![CDATA[${idAddressDelivery}]]></id_address_d
     <round_type><![CDATA[${orderData.round_type ?? 1}]]></round_type>
     <conversion_rate><![CDATA[${orderData.conversion_rate ?? 1}]]></conversion_rate>
     <reference><![CDATA[${orderData.reference || ''}]]></reference>
-    <associations>
-      <order_rows nodeType="order_row" virtualEntity="true">
-${rowNodes}
-      </order_rows>
-    </associations>
   </order>
 </prestashop>`;
 };

@@ -1,6 +1,7 @@
 import Papa from 'papaparse';
 import api from './api';
 import { xmlToJson } from './Util';
+import { resetAllData } from './resetService';
 import { buildCategoryXML, buildTaxXML, buildTaxRulesGroupXML, buildTaxRuleXML, buildProductXML } from './xml/importXmlBuilder';
 
 // Implémentation locale de prestashopApi en utilisant votre api.js et xmlToJson
@@ -12,8 +13,22 @@ const prestashopApi = {
   },
   updateResource: async (resource, id, xml) => {
     const response = await api.put(`/${resource}/${id}`, xml);
-    const jsonObj = xmlToJson(response.data);
-    return jsonObj.prestashop;
+              let orderId = null;
+
+              try {
+                const orderResponse = await prestashopApi.createResource('orders', orderXML);
+                orderId = getPrimitiveValue(orderResponse?.order?.id);
+              } catch (creationError) {
+                console.warn(`⚠️ Création de commande signalée en erreur pour ${email}:`, creationError.message);
+
+                const fallbackOrder = await findOrderByCartId({ cartId, customerId });
+                if (fallbackOrder?.id) {
+                  orderId = getPrimitiveValue(fallbackOrder.id);
+                  console.warn(`↪ Commande retrouvée malgré l'erreur: ${orderId}`);
+                } else {
+                  throw creationError;
+                }
+              }
   },
   getResources: async (resource, id = null, filter = null, params = {}) => {
     let url = `/${resource}`;
@@ -840,6 +855,19 @@ const getPrimitiveValue = (value) => {
   return value;
 };
 
+const findOrderByCartId = async ({ cartId, customerId }) => {
+  const orders = await prestashopApi.getResources('orders', null, null, {
+    display: 'full',
+    'filter[id_cart]': `[${cartId}]`
+  });
+
+  return orders.find(order => {
+    const orderCartId = String(getPrimitiveValue(order?.id_cart) || '').trim();
+    const orderCustomerId = String(getPrimitiveValue(order?.id_customer) || '').trim();
+    return orderCartId === String(cartId) && orderCustomerId === String(customerId);
+  }) || null;
+};
+
 const getPaymentMethodLabel = (paymentState) => {
   const normalizedState = (paymentState || '').toString().toLowerCase();
 
@@ -1258,12 +1286,27 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
                 total_paid: roundDecimal(totalPaid),
                 total_products: roundDecimal(totalProducts),
                 total_products_wt: roundDecimal(totalProductsWT),
-                order_rows: orderRows
               });
 
               console.log(`DEBUG File3: Order XML (ligne ${i + 1}):`, orderXML);
-              const orderResponse = await prestashopApi.createResource('orders', orderXML);
-              const orderId = orderResponse.order?.id;
+              let orderId = null;
+
+              try {
+                const orderResponse = await prestashopApi.createResource('orders', orderXML);
+                orderId = getPrimitiveValue(orderResponse?.order?.id);
+              } catch (creationError) {
+                console.warn(`⚠️ Création de commande signalée en erreur pour ${email}:`, creationError.message);
+
+                const fallbackOrder = await findOrderByCartId({ cartId, customerId });
+                if (fallbackOrder?.id) {
+                  orderId = getPrimitiveValue(fallbackOrder.id);
+                  console.warn(`↪ Commande retrouvée malgré l'erreur: ${orderId}`);
+                } else {
+                  throw creationError;
+                }
+              }
+
+              console.log("ID Commande Créée (debu):", orderId);
 
               if (!orderId) {
                 throw new Error(`Pas d'ID retourné pour la commande`);
@@ -1287,15 +1330,14 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
                   id_shop: getPrimitiveValue(freshOrder?.id_shop) || CONSTANTS.ID_SHOP_DEFAULT,
                   id_lang: getPrimitiveValue(freshOrder?.id_lang) || CONSTANTS.ID_LANG,
                   secure_key: getPrimitiveValue(freshOrder?.secure_key) || secureKey,
+                  current_state: getPrimitiveValue(freshOrder?.current_state) || 11,
                   module: CONSTANTS.PAYMENT_MODULE,
                   payment: getPrimitiveValue(freshOrder?.payment) || CONSTANTS.PAYMENT_LABEL,
-                  current_state: getPrimitiveValue(freshOrder?.current_state) || 11,
                   date_add: `${dateCmd} 00:00:00`,
                   date_upd: `${dateCmd} 00:00:00`,
                   total_paid: roundDecimal(totalPaid),
                   total_products: roundDecimal(totalProducts),
                   total_products_wt: roundDecimal(totalProductsWT),
-                  order_rows: orderRows,
                 });
 
                 console.log(`DEBUG File3: Order Update XML (ligne ${i + 1}):`, orderUpdateXML);
@@ -1557,5 +1599,26 @@ const uploadProductImage = async (productId, file) => {
       errorText = error.message;
     }
     throw new Error(`Upload échoué: ${errorText}`);
+  }
+};
+
+/**
+ * Rollback complet de tous les imports en cas d'erreur
+ * Appelle resetAllData pour supprimer toutes les données importées
+ * Cela garantit une transaction "TOUT OU RIEN"
+ */
+export const rollbackAllImports = async () => {
+  try {
+    console.warn('⚠️ ROLLBACK EN COURS - Suppression de toutes les données importées...');
+    
+    // Appeler resetAllData pour vider toutes les tables
+    await resetAllData((resourceName, status, completedCount, meta = {}) => {
+      console.log(`  → Suppression de ${resourceName}... (${status})`);
+    });
+    
+    console.log('✓ Rollback terminé - Toutes les données ont été supprimées');
+  } catch (error) {
+    console.error('✗ Erreur lors du rollback:', error);
+    throw new Error(`Erreur lors du rollback: ${error.message}`);
   }
 };

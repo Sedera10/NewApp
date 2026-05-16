@@ -13,6 +13,7 @@
     "axios": "^1.16.1",
     "bootstrap": "^5.3.8",
     "fast-xml-parser": "^5.8.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^1.16.0",
     "papaparse": "^5.5.3",
     "react": "^19.2.5",

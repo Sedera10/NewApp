@@ -82,6 +82,9 @@ export async function resetResource(resource) {
         if (resource === 'addresses') {
             idArray = idArray.filter(id => parseInt(id) != 3 && parseInt(id) != 4 && parseInt(id) != 6);
         }
+        if (resource === 'customers') {
+            idArray = idArray.filter(id => parseInt(id) != 1);
+        }
         if (idArray.length === 0) return;
 
         let deletedCount = 0;
