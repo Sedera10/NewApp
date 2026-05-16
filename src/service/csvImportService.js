@@ -13,22 +13,8 @@ const prestashopApi = {
   },
   updateResource: async (resource, id, xml) => {
     const response = await api.put(`/${resource}/${id}`, xml);
-              let orderId = null;
-
-              try {
-                const orderResponse = await prestashopApi.createResource('orders', orderXML);
-                orderId = getPrimitiveValue(orderResponse?.order?.id);
-              } catch (creationError) {
-                console.warn(`⚠️ Création de commande signalée en erreur pour ${email}:`, creationError.message);
-
-                const fallbackOrder = await findOrderByCartId({ cartId, customerId });
-                if (fallbackOrder?.id) {
-                  orderId = getPrimitiveValue(fallbackOrder.id);
-                  console.warn(`↪ Commande retrouvée malgré l'erreur: ${orderId}`);
-                } else {
-                  throw creationError;
-                }
-              }
+    const jsonObj = xmlToJson(response.data);
+    return jsonObj.prestashop;
   },
   getResources: async (resource, id = null, filter = null, params = {}) => {
     let url = `/${resource}`;
@@ -66,21 +52,177 @@ const CONSTANTS = {
   ID_COUNTRY: 8, // France
   ID_SHOP_DEFAULT: 1,
   ID_PARENT_CATEGORY: 2, // Racine
-  PAYMENT_MODULE: 'ps_wirepayment',
-  PAYMENT_LABEL: 'Paiement par virement bancaire',
+  PAYMENT_MODULE: 'ps_cashondelivery',
+  PAYMENT_LABEL: 'Paiement a la livraison',
 };
+
+const CSV_SCHEMAS = {
+  file1: {
+    label: 'Fichier 1',
+    expectedHeaders: [
+      'date_availability_produit',
+      'nom',
+      'reference',
+      'prix_ttc',
+      'Taxe',
+      'categorie',
+      'prix_achat'
+    ],
+    fieldMap: {
+      dateavailabilityproduit: 'date_availability_produit',
+      nom: 'nom',
+      reference: 'reference',
+      prixttc: 'prix_ttc',
+      taxe: 'Taxe',
+      categorie: 'categorie',
+      prixachat: 'prix_achat'
+    }
+  },
+  file2: {
+    label: 'Fichier 2',
+    expectedHeaders: [
+      'reference',
+      'specificité',
+      'karazany',
+      'stock_initial',
+      'prix_vente_ttc'
+    ],
+    fieldMap: {
+      reference: 'reference',
+      specificite: 'specificité',
+      karazany: 'karazany',
+      stockinitial: 'stock_initial',
+      prixventettc: 'prix_vente_ttc'
+    }
+  },
+  file3: {
+    label: 'Fichier 3',
+    expectedHeaders: [
+      'date',
+      'nom',
+      'email',
+      'pwd',
+      'adresse',
+      'achat',
+      'etat'
+    ],
+    fieldMap: {
+      date: 'date',
+      nom: 'nom',
+      email: 'email',
+      pwd: 'pwd',
+      adresse: 'adresse',
+      achat: 'achat',
+      etat: 'etat'
+    }
+  }
+};
+
+const normalizeCsvHeader = (value) => (value ?? '')
+  .toString()
+  .replace(/^\uFEFF/, '')
+  .trim()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/\s+/g, '')
+  .replace(/_/g, '');
+
+const normalizeCsvValue = (value) => (value ?? '').toString().trim();
+
+const normalizeCsvRows = (rows, fieldMap) => rows.map((row) => {
+  const normalizedRow = {};
+
+  Object.entries(row || {}).forEach(([key, value]) => {
+    const normalizedKey = normalizeCsvHeader(key);
+    const canonicalKey = fieldMap[normalizedKey] || key.trim();
+    normalizedRow[canonicalKey] = value;
+  });
+
+  return normalizedRow;
+});
+
+const validateCsvHeaders = (headers, expectedHeaders, label) => {
+  const actualHeaders = Array.isArray(headers) ? headers : [];
+  const normalizedExpected = expectedHeaders.map(normalizeCsvHeader);
+  const normalizedActual = actualHeaders.map(normalizeCsvHeader);
+
+  const missing = expectedHeaders.filter((header) => !normalizedActual.includes(normalizeCsvHeader(header)));
+  const unexpected = actualHeaders.filter((header) => !normalizedExpected.includes(normalizeCsvHeader(header)));
+
+  if (missing.length || unexpected.length) {
+    const parts = [];
+    if (missing.length) {
+      parts.push(`colonnes manquantes: ${missing.join(', ')}`);
+    }
+    if (unexpected.length) {
+      parts.push(`colonnes non conformes: ${unexpected.join(', ')}`);
+    }
+    throw new Error(`${label}: ${parts.join(' | ')}`);
+  }
+};
+
+const isValidDateDMY = (value) => {
+  const dateValue = normalizeCsvValue(value);
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(dateValue)) {
+    return false;
+  }
+
+  const [dayText, monthText, yearText] = dateValue.split('/');
+  const day = Number.parseInt(dayText, 10);
+  const month = Number.parseInt(monthText, 10);
+  const year = Number.parseInt(yearText, 10);
+
+  if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) {
+    return false;
+  }
+
+  const parsedDate = new Date(year, month - 1, day);
+  return parsedDate.getFullYear() === year
+    && parsedDate.getMonth() === month - 1
+    && parsedDate.getDate() === day;
+};
+
+const getPositiveAmountValue = (value) => {
+  const normalized = normalizeCsvValue(value).replace(/\s+/g, '').replace(/[^0-9,.-]/g, '').replace(',', '.');
+  if (!normalized) return NaN;
+  return Number.parseFloat(normalized);
+};
+
+const isPositiveAmount = (value) => Number.isFinite(getPositiveAmountValue(value)) && getPositiveAmountValue(value) > 0;
+
+const createValidationError = (message) => {
+  const error = new Error(message);
+  error.isValidationError = true;
+  return error;
+};
+
+const shouldAbortOnError = (error) => error?.isValidationError === true;
 
 /**
  * Parse un fichier CSV générique
  */
-const parseCSV = (file) => {
+const parseCSV = (file, schema) => {
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
       header: true,
       dynamicTyping: false,
       skipEmptyLines: true,
       delimiter: ',',
-      complete: (results) => resolve(results.data),
+      complete: (results) => {
+        try {
+          const fields = results.meta?.fields || [];
+          if (!fields.length) {
+            throw new Error('Aucune colonne détectée');
+          }
+
+          validateCsvHeaders(fields, schema.expectedHeaders, schema.label);
+          const normalizedRows = normalizeCsvRows(results.data || [], schema.fieldMap);
+          resolve(normalizedRows);
+        } catch (error) {
+          reject(error);
+        }
+      },
       error: (error) => reject(error)
     });
   });
@@ -89,17 +231,17 @@ const parseCSV = (file) => {
 /**
  * Parse le CSV Fichier 1 (Produits de base)
  */
-export const parseFile1CSV = (file) => parseCSV(file);
+export const parseFile1CSV = (file) => parseCSV(file, CSV_SCHEMAS.file1);
 
 /**
  * Parse le CSV Fichier 2 (Variantes et Stock)
  */
-export const parseFile2CSV = (file) => parseCSV(file);
+export const parseFile2CSV = (file) => parseCSV(file, CSV_SCHEMAS.file2);
 
 /**
  * Parse le CSV Fichier 3 (Commandes et Clients)
  */
-export const parseFile3CSV = (file) => parseCSV(file);
+export const parseFile3CSV = (file) => parseCSV(file, CSV_SCHEMAS.file3);
 
 const normalizeNumber = (value) => {
   if (!value) return 0;
@@ -340,6 +482,19 @@ export const importFile1 = async (csvFile, onProgress = () => {}) => {
         // Trim les données du CSV
         const categoryName = productData.categorie?.trim();
         const taxRate = productData.Taxe?.trim();
+        const availabilityDate = productData.date_availability_produit?.trim();
+
+        if (!availabilityDate || !isValidDateDMY(availabilityDate)) {
+          throw createValidationError(`Ligne ${i + 1}: date_availability_produit invalide, format attendu DD/MM/YYYY`);
+        }
+
+        if (!isPositiveAmount(productData.prix_ttc)) {
+          throw createValidationError(`Ligne ${i + 1}: prix_ttc doit être un montant positif`);
+        }
+
+        if (!isPositiveAmount(productData.prix_achat)) {
+          throw createValidationError(`Ligne ${i + 1}: prix_achat doit être un montant positif`);
+        }
 
         const idCategory = categoryMap[categoryName];
         const idTaxRulesGroup = taxRulesGroupMap[taxRate];
@@ -367,6 +522,9 @@ export const importFile1 = async (csvFile, onProgress = () => {}) => {
           progress: ((i + 1) / csvData.length) * 100
         });
       } catch (error) {
+        if (shouldAbortOnError(error)) {
+          throw error;
+        }
         results.products.push({
           reference: productData.reference,
           name: productData.nom,
@@ -641,6 +799,10 @@ export const importFile2 = async (csvFile, file1Results, onProgress = () => {}) 
       }
 
       try {
+        if (prixVente && !isPositiveAmount(prixVente)) {
+          throw createValidationError(`Ligne ${i + 1}: prix_vente_ttc doit être un montant positif`);
+        }
+
         // Cas 1: Produit SANS variante
         if (!specificite || !valeur) {
           // Juste mettre à jour le stock du produit
@@ -714,6 +876,9 @@ export const importFile2 = async (csvFile, file1Results, onProgress = () => {}) 
           progress: ((i + 1) / csvData.length) * 100
         });
       } catch (error) {
+        if (shouldAbortOnError(error)) {
+          throw error;
+        }
         results.errors.push(`Produit '${reference}': ${error.message}`);
       }
     }
@@ -1052,7 +1217,13 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
         const adresse = row.adresse?.trim();
         const achatField = row.achat?.trim();
         const etat = row.etat?.trim();
-        const dateCmd = convertDateFormat(row.date?.trim());
+        const rawDate = row.date?.trim();
+
+        if (!rawDate || !isValidDateDMY(rawDate)) {
+          throw createValidationError(`Ligne ${i + 1}: date invalide pour ${email} (format attendu DD/MM/YYYY)`);
+        }
+
+        const dateCmd = convertDateFormat(rawDate);
 
         // Validation des données
         if (!email || !nom || !pwd) {
@@ -1123,6 +1294,9 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
             }); // Ajouter au cache
             console.log(`✓ Client créé: ${email} (ID: ${customerId})`);
           } catch (error) {
+            if (shouldAbortOnError(error)) {
+              throw error;
+            }
             results.errors.push(`Client '${email}': ${error.message}`);
             continue; // Passer à la ligne suivante si le client ne peut pas être créé
           }
@@ -1200,9 +1374,8 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
           }
           console.log(`DEBUG File3 FINAL TOTALS: totalPaid=${totalPaid}, totalProducts=${totalProducts}, totalProductsWT=${totalProductsWT}`);
 
-          if (totalPaid === 0) {
-            results.errors.push(`Ligne ${i + 1}: Total de commande = 0 pour ${email}`);
-            continue;
+          if (totalPaid <= 0) {
+            throw createValidationError(`Ligne ${i + 1}: Total de commande invalide pour ${email}`);
           }
 
           // ÉTAPE 3: Créer le panier (obligatoire pour créer une commande via l'API)
@@ -1261,8 +1434,8 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
 
             const normalizedStatus = normalizeStatusLabel(etat);
 
-            // CONDITION: Si etat === "dans le panier", créer SEULEMENT le cart (pas la commande)
-            if (normalizedStatus !== 'dans le panier') {
+            // CONDITION: Si etat === "dans le panier" OU vide, créer SEULEMENT le cart (pas la commande)
+            if (normalizedStatus && normalizedStatus !== 'dans le panier') {
               // ÉTAPE 4: Créer la commande
               const shouldCreateCancellationHistory = normalizedStatus === 'annule';
               const cancelledStateId = shouldCreateCancellationHistory
@@ -1306,10 +1479,8 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
                 }
               }
 
-              console.log("ID Commande Créée (debu):", orderId);
-
               if (!orderId) {
-                throw new Error(`Pas d'ID retourné pour la commande`);
+                throw createValidationError(`Pas d'ID retourné pour la commande`);
               }
 
               // Mise à jour des dates après insertion, sans toucher au statut
@@ -1344,6 +1515,9 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
                 await prestashopApi.updateResource('orders', orderId, orderUpdateXML);
                 console.log(`✓ Dates de commande mises à jour: ${dateCmd}`);
               } catch (updateError) {
+                if (shouldAbortOnError(updateError)) {
+                  throw updateError;
+                }
                 console.warn(`⚠️ Impossible de mettre à jour les dates de la commande ${orderId}:`, updateError.message);
                 results.errors.push(`Commande ${orderId}: Impossible de mettre à jour les dates (${updateError.message})`);
               }
@@ -1411,6 +1585,9 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
               }
             } else {
               // Si etat === "dans le panier", créer SEULEMENT le cart
+              if (totalPaid <= 0) {
+                throw createValidationError(`Ligne ${i + 1}: Total de commande invalide pour ${email}`);
+              }
               console.log(`✓ Panier créé (en attente): ${email} (Cart ID: ${cartId}) - État: "${etat}" - Total: ${roundDecimal(totalPaid)}`);
               results.orders.push({
                 customer: email,
@@ -1423,9 +1600,15 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
               });
             }
           } catch (error) {
+            if (shouldAbortOnError(error)) {
+              throw error;
+            }
             results.errors.push(`Commande pour '${email}': ${error.message}`);
           }
         } catch (error) {
+          if (shouldAbortOnError(error)) {
+            throw error;
+          }
           results.errors.push(`Adresse pour '${email}': ${error.message}`);
         }
 
@@ -1435,6 +1618,9 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
           progress: ((i + 1) / csvData.length) * 100
         });
       } catch (error) {
+        if (shouldAbortOnError(error)) {
+          throw error;
+        }
         results.errors.push(`Ligne ${i + 1}: ${error.message}`);
       }
     }
