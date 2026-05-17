@@ -277,7 +277,7 @@ export const commandeService = {
               total_products_wt: parseFloat((orderData.total_products_wt || orderData.total_products).toFixed(2)),
               total_shipping: parseFloat((orderData.total_shipping || 0).toFixed(2)),
               total_shipping_tax_incl: parseFloat((orderData.total_shipping_tax_incl || orderData.total_shipping || 0).toFixed(2)),
-              current_state: 1
+              current_state: 3 // 3 = "En cours de préparation" au lieu de 11 qui peut causer des erreurs selon la config PrestaShop
           };
 
           console.log('Order payload:', payload);

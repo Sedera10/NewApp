@@ -12,6 +12,13 @@ export const xmlToJson = (xml) => {
   return parser.parse(xml);
 };
 
+export function isAnonymeUser() {
+  const user = JSON.parse(
+    localStorage.getItem('client_session')
+  );
+  return user?.id === 1;
+}
+
 export const jsonToXml = (jsonObj) => {
   return builder.build(jsonObj);
 };

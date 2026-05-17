@@ -52,14 +52,6 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
               <img src={logoUrl} alt="MyStore logo" style={{ height: '50px', width: 'auto', objectFit: 'contain', display: 'block' }} />
             </div>
 
-            {/* Menu & Recherche */}
-            <div className="search-nav-container">
-              <div className="search-bar">
-                <input type="text" placeholder="Rechercher un produit..." />
-                <button className="search-btn"><Search size={18} /></button>
-              </div>
-            </div>
-
             {/* Actions Utilisateur */}
             <div className="user-actions d-flex align-items-center">
               { !customer ? (

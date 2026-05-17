@@ -7,14 +7,18 @@ import './HomePage.css';
 const HomePage = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [anonymeUser, setAnonymeUser] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
+        const anonyme = await customerService.getCustomerById(1);
+        setAnonymeUser(anonyme)
         const fetchedUsers = await customerService.getCustomers();
         const usersArray = Array.isArray(fetchedUsers) ? fetchedUsers : [fetchedUsers];
-        setUsers(usersArray);
+        const usersSaufAnonyme = usersArray.filter((u) => u.id != 1);
+        setUsers(usersSaufAnonyme);
       } catch (error) {
         console.error('Erreur lors du chargement des utilisateurs:', error);
       } finally {
@@ -42,11 +46,11 @@ const HomePage = () => {
       };
       localStorage.setItem('client_session', JSON.stringify(sessionData));
     } else {
-      const sessionData = {
-        id: "0",
-        firstname: "Visiteur",
-        lastname: "Anonyme",
-        email: "",
+        const sessionData = {
+        id: getTextVal(anonymeUser.id),
+        firstname: getTextVal(anonymeUser.firstname),
+        lastname: getTextVal(anonymeUser.lastname),
+        email: getTextVal(anonymeUser.email),
         isLoggedIn: true
       };
       localStorage.setItem('client_session', JSON.stringify(sessionData));

@@ -67,6 +67,9 @@
   font-weight: bold;
   color: #e63946;
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
 }
 
 .product-price-ht {
@@ -84,6 +87,7 @@
   flex-direction: column;
   gap: 4px;
   margin-top: 10px;
+  
 }
 
 .stock-badge.in-stock {
@@ -237,4 +241,42 @@
 .view-cart-link:hover {
   background: #333;
   color: white;
+}
+
+.product-combinations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 15px;
+}
+
+.product-combinations label {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.combination-select {
+  padding: 10px 12px;
+  font-size: 15px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #fff;
+  color: #333;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.combination-select:hover {
+  border-color: #bbb;
+}
+
+.combination-select:focus {
+  border-color: #555;
+  box-shadow: 0 0 0 2px rgba(85, 85, 85, 0.1);
+}
+
+.combination-select {
+  max-width: 150px;
 }

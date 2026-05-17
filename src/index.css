@@ -2,7 +2,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-body: #f8f8f8;
+  --bg-body: #fcfcfc;
   --color-primary: #3d4a41; /* Vert très foncé/Gris de l'image */
   --color-secondary: #f4f5f7; /* Gris très clair pour les fonds d'images */
   --color-price: #52796f; /* Vert grisé pour les prix */

@@ -392,6 +392,93 @@ export const productService = {
     }
   },
 
+  getProductCombinationsWithPrices: async (productId) => {
+    try {
+      if (!productId && productId !== 0) {
+        throw new Error('Identifiant produit manquant');
+      }
+      const productResponse = await api.get(`/products/${productId}?display=full`);
+      const productJsonObj = xmlToJson(productResponse.data);
+      const product = productJsonObj?.prestashop?.product || null;
+
+      if (!product) throw new Error(`Produit ${productId} non trouvé`);
+
+      const basePriceHT = Number.parseFloat(getTextValue(product?.price)) || 0;
+      const taxRulesGroupId = product?.id_tax_rules_group;
+
+      const taxRate = await getTaxRateForTaxRulesGroupId(taxRulesGroupId);
+
+      const combinationIds = getAssociationCombinationIds(product);
+
+      if (!combinationIds.length) {
+        const basePriceTTC = basePriceHT * (1 + taxRate / 100);
+        return [{
+          idProductAttribute: 0,
+          name: "Standard / Unique",
+          priceTTC: formatPrice(basePriceTTC),
+          priceHT: formatPrice(basePriceHT)
+        }];
+      }
+
+      const formattedCombinations = [];
+      for (const combId of combinationIds) {
+        const combResponse = await api.get(`/combinations/${combId}?display=full`);
+        const combJsonObj = xmlToJson(combResponse.data);
+        const combination = combJsonObj?.prestashop?.combination || null;
+
+        if (!combination) continue;
+
+        // Calcul des impacts financiers de la déclinaison
+        const priceImpactHT = Number.parseFloat(getTextValue(combination?.price)) || 0;
+        const finalPriceHT = basePriceHT + priceImpactHT;
+        const finalPriceTTC = finalPriceHT * (1 + taxRate / 100);
+
+        // 5. Récupérer le nom textuel des attributs (ex: "Bleu", "XL")
+        const valueNodes = ensureArray(combination?.associations?.product_option_values?.product_option_value || combination?.associations?.product_option_values);
+        const combinationNameParts = [];
+
+        for (const node of valueNodes) {
+          const valueId = getNumericValue(node?.id, null);
+          if (valueId !== null) {
+            try {
+              const valueResponse = await api.get(`/product_option_values/${valueId}?display=full`);
+              const valueJsonObj = xmlToJson(valueResponse.data);
+              const optionValue = valueJsonObj?.prestashop?.product_option_value || null;
+              
+              // Récupération de la valeur texte multilingue sécurisée
+              let nameText = '';
+              if (optionValue?.name?.language) {
+                nameText = getTextValue(ensureArray(optionValue.name.language)[0]);
+              } else {
+                nameText = getTextValue(optionValue?.name);
+              }
+
+              if (nameText) combinationNameParts.push(nameText);
+            } catch (e) {
+              console.warn(`Impossible de charger la description pour l'option_value ${valueId}`);
+            }
+          }
+        }
+
+        // Si aucun libellé d'attribut n'est trouvé, on utilise ta fonction interne de secours
+        const fullName = combinationNameParts.join(' - ') || getVariantLabel(product, combination);
+
+        formattedCombinations.push({
+          idProductAttribute: combId,
+          name: fullName,
+          priceTTC: formatPrice(finalPriceTTC),
+          priceHT: formatPrice(finalPriceHT)
+        });
+      }
+
+      return formattedCombinations;
+
+    } catch (error) {
+      console.error(`Erreur lors de la récupération des déclinaisons pour le produit ${productId}:`, error);
+      return [];
+    }
+  },
+
   getCategories: async () => {
     try {
       const response = await api.get('/categories?display=full');
@@ -428,8 +515,6 @@ export const productService = {
     
     // Get image specific from prestashop
     const defaultImageId = getText(p.id_default_image);
-    // Construct prestashop image url (assuming images endpoint layout)
-    // /api/images/products/{id}/{id_default_image}/
     const image = defaultImageId ? `${api.defaults.baseURL}/images/products/${id}/${defaultImageId}/?ws_key=${api.defaults.params.ws_key}` : 'https://picsum.photos/300';
 
     const rawDateAvailability = (getText(p.available_date) !== '0000-00-00' && getText(p.available_date) !== '0000-00-00 00:00:00') ? getText(p.available_date) : getText(p.date_add);

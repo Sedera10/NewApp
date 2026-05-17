@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import { Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import './ProductCard.css';
 
 const ProductCard = ({ product }) => {
-  const [isFavorite, setIsFavorite] = useState(false);
   const priceTTC = product?.priceTTC ?? product?.price ?? '0.00';
   const priceHT = product?.priceHT ?? '0.00';
 
@@ -17,14 +15,6 @@ const ProductCard = ({ product }) => {
           {!product.marker && product.isNew && <span className="badge badge-new">NEW</span>}
           {product.discount && <span className="badge badge-discount">-{product.discount}%</span>}
         </div>
-        
-        {/* Favoris */}
-        <button 
-          className={`favorite-btn ${isFavorite ? 'active' : ''}`}
-          onClick={() => setIsFavorite(!isFavorite)}
-        >
-          <Heart size={20} fill={isFavorite ? "currentColor" : "none"} />
-        </button>
 
         <Link to={`/mystore/fr/product/${product.id}`}>
           <img src={product.image} alt={product.name} />

@@ -49,7 +49,7 @@ const CartPage = () => {
         <div className="cart-header">
           <h1>Mon Panier</h1>
           <button
-            onClick={() => navigate('/mystore/fr')}
+            onClick={() => navigate('/mystore/fr/products')}
             className="continue-shopping-btn"
           >
             ← Continuer les achats
@@ -60,7 +60,7 @@ const CartPage = () => {
           <div className="empty-cart">
             <p>Votre panier est vide</p>
             <button
-              onClick={() => navigate('/mystore/fr')}
+              onClick={() => navigate('/mystore/fr/products')}
               className="shop-btn"
             >
               Commencer à acheter

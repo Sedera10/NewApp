@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { commandeService } from '../../../service/Commande';
+import { cartService } from '../../../service/cartService';
 import Header from '../../../components/layout/Header';
 import './Commande.css';
 
 export default function CommandePage() {
+  const [paniers, setPaniers] = useState([]);
   const [commandes, setCommandes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [customer, setCustomer] = useState(null);
@@ -38,10 +40,14 @@ export default function CommandePage() {
         const customerId = connectedCustomer.id;
 
         const allCommandes = await commandeService.getCommandes();
+        const lesPaniersRaw = await cartService.getUnorderedCarts(customerId);
+        const lesPaniersFormatted = await Promise.all((lesPaniersRaw || []).map(cart => cartService.formatCart(cart)));
 
         const customerCommandes = (allCommandes || []).filter(
           cmd => getTextVal(cmd.idCustomer) === customerId
         );
+
+        setPaniers(lesPaniersFormatted.filter(Boolean));
 
         setCommandes(customerCommandes);
 
@@ -103,20 +109,67 @@ export default function CommandePage() {
           <div className="d-flex justify-content-between align-items-center mb-4">
             <h1 className="h2 mb-0">Mes Commandes</h1>
             <button
-              onClick={() => navigate('/mystore/fr')}
+              onClick={() => navigate('/mystore/fr/products')}
               className="btn btn-outline-primary"
             >
               ← Continuer les achats
             </button>
           </div>
-
+          {/* Dans le panier */}
+          {paniers.length !== 0 && (
+            <div className="mb-5 table-responsive shadow-sm rounded-3">
+              <h3 className="p-3 mb-0 bg-light border-bottom">En attente (Paniers)</h3>
+              <table className="table table-hover mb-0">
+                <thead className="table-light border-bottom">
+                  <tr>
+                    <th scope="col" className="fw-600">Numéro de Panier</th>
+                    <th scope="col" className="fw-600">Date</th>
+                    <th scope="col" className="fw-600">Montant</th>
+                    <th scope="col" className="fw-600">Statut</th>
+                    <th scope="col" className="text-center fw-600">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paniers.map(panier => (
+                    <tr key={panier.id} className="align-middle" style={{backgroundColor: '#fff9e6'}}>
+                      <td className='p-2'>
+                        <strong>#{panier.id}</strong>
+                      </td>
+                      <td>
+                        <span className="text-muted">{formatDate(panier.dateAdd)}</span>
+                      </td>
+                      <td>
+                        <strong className="text-success">
+                          {panier.totalAmount} €
+                        </strong>
+                      </td>
+                      <td>
+                        <span className="badge bg-warning text-dark">
+                          Dans le panier
+                        </span>
+                      </td>
+                      <td className="text-center">
+                        <button
+                          className="btn btn-sm btn-outline-primary"
+                          onClick={() => navigate('/mystore/fr/cart')}
+                        >
+                          Reprendre
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {/* Les commandes */}
           {commandes.length === 0 ? (
             <div className="empty-state text-center py-5">
               <div className="empty-icon mb-3">📦</div>
               <h2>Aucune commande</h2>
               <p className="text-muted">Vous n'avez pas encore passé de commande.</p>
               <button
-                onClick={() => navigate('/mystore/fr')}
+                onClick={() => navigate('/mystore/fr/products')}
                 className="btn btn-primary"
               >
                 Commencer à magasiner

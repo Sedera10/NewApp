@@ -51,8 +51,8 @@ const CheckoutPage = () => {
         const currentUser = JSON.parse(localStorage.getItem('client_session'));
         console.log('Current user from session:', currentUser);
 
-        if (!currentUser?.isLoggedIn) {
-          navigate('/mystore/fr/login');
+        if (!currentUser?.isLoggedIn || currentUser.id == 1) {
+          navigate('/mystore/fr/login', { state: { redirect: '/mystore/fr/checkout' } });
           return;
         }
 
@@ -182,27 +182,42 @@ const CheckoutPage = () => {
       // Prepare cart items
       const cartItems = cart.map(item => ({
         id_product: item.id,
-        id_product_attribute: 0,
+        id_product_attribute: item.id_product_attribute || item.idProductAttribute || 0,
         quantity: item.quantity,
         id_address_delivery: getTextVal(selectedAddress.id)
       }));
 
-      // Step 1: Create a cart in Prestashop
-      console.log('Step 1: Creating cart in Prestashop...');
-      console.log('Cart items to add:', cartItems);
-
-      const cartInPrestashop = await cartService.createCart(
-        customer.id,
-        cartItems,
-        1,
-        1,
-        getTextVal(selectedAddress.id)
-      );
-
-      console.log('Cart response from API:', cartInPrestashop);
-
-      const cartId = getTextVal(cartInPrestashop.id);
-      console.log('Cart created with ID:', cartId);
+      // Step 1: Update existing cart or create new one in Prestashop
+      console.log('Step 1: Using cart in Prestashop...');
+      let currentCartId = localStorage.getItem(`current_cart_id_${customer.id}`);
+      let cartId = currentCartId;
+      
+      if (!currentCartId) {
+           const cartInPrestashop = await cartService.createCart(
+            customer.id,
+            cartItems,
+            1,
+            1,
+            getTextVal(selectedAddress.id)
+          );
+          cartId = getTextVal(cartInPrestashop.id);
+      } else {
+           await cartService.updateCart(currentCartId, {
+               id_customer: customer.id,
+               id_currency: 1,
+               id_lang: 1,
+               id_address_delivery: getTextVal(selectedAddress.id),
+               id_address_invoice: getTextVal(selectedAddress.id),
+               associations: {
+                   cart_rows: {
+                       cart_row: cartItems
+                   }
+               }
+           });
+           localStorage.removeItem(`current_cart_id_${customer.id}`); // Clear it as it becomes an order
+      }
+      
+      console.log('Cart ready with ID:', cartId);
 
       // Verify cart was created
       if (!cartId) {
@@ -222,9 +237,9 @@ const CheckoutPage = () => {
         id_carrier: carrierId,
         payment: paymentModules.find(m => m.name === paymentMethod)?.displayName || paymentMethod,
         module: paymentMethod,
-        total_paid: parseFloat(totalWithShipping.toFixed(2)),
-        total_products: parseFloat(totalAmount.toFixed(2)),
-        total_shipping: parseFloat((selectedCarrier?.price || 0).toFixed(2)),
+        total_paid: parseFloat(totalWithShipping.toFixed(6)),
+        total_products: parseFloat(totalAmount.toFixed(6)),
+        total_shipping: parseFloat((selectedCarrier?.price || 0).toFixed(6)),
         items: cart.map(item => ({
           id_product: item.id,
           product_name: item.name,

@@ -40,13 +40,13 @@ export default function Login() {
           // Authentication Client (FO)
           const session = await loginFO(identifier, password);
           if (session) {
-            navigate("/mystore/fr"); 
+            navigate("/mystore/fr/products"); 
           }
         } else {
           // Authentication Admin (BO)
           const ok = loginBO(identifier, password);
           if (ok) {
-            window.location.href = "/mystore/admin/import"; 
+            window.location.href = "/mystore/admin/dashboard"; 
           } else {
             setError("Identifiants incorrects");
           }

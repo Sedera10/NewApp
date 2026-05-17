@@ -161,14 +161,54 @@ export const cartService = {
                 }
              });
 
-             const jsonObj = xmlToJson(response.data);
-             console.log('Cart update response:', jsonObj);
-             return jsonObj?.prestashop?.cart;
+            const jsonObj = xmlToJson(response.data);
+            console.log('Cart update response:', jsonObj);
+            return jsonObj?.prestashop?.cart;
         } catch (error) {
              console.error(`Erreur lors de la mise à jour du panier ${idCart}:`, error);
              console.error("Error response data:", error.response?.data);
              throw error;
         }
+    },
+
+    getUnorderedCarts: async (idCustomer) => {
+        try {
+            // on trie pour avoir les plus récents
+            const response = await api.get(`/carts?display=full&filter[id_customer]=${idCustomer}&sort=[id_DESC]`);
+            const jsonObj = xmlToJson(response.data);
+            let carts = jsonObj?.prestashop?.carts?.cart;
+            
+            if (!carts) return [];
+            
+            const cartArray = Array.isArray(carts) ? carts : [carts];
+            const unorderedCarts = [];
+            
+            for (const cart of cartArray) {
+                const cartId = typeof cart.id === 'object' ? cart.id['#text'] : cart.id;
+                
+                // Vérifier si ce panier est dans une commande
+                try {
+                    const orderCheck = await api.get(`/orders?filter[id_cart]=${cartId}`);
+                    const orderJson = xmlToJson(orderCheck.data);
+                    if (!orderJson?.prestashop?.orders?.order) {
+                        // Pas de commande pour ce panier, il est disponible !
+                        unorderedCarts.push(cart);
+                    }
+                } catch (err) {
+                    // S'il y a une erreur ou 404, aucune commande trouvée, donc disponible.
+                    unorderedCarts.push(cart);
+                }
+            }
+            return unorderedCarts;
+        } catch (error) {
+            console.error(`Erreur getUnorderedCarts pour client ${idCustomer}:`, error);
+            return [];
+        }
+    },
+
+    getLastCart: async (idCustomer) => {
+        const unorderedCarts = await cartService.getUnorderedCarts(idCustomer);
+        return unorderedCarts.length > 0 ? unorderedCarts[0] : null;
     }
 };
 
