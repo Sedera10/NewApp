@@ -401,6 +401,44 @@ const waitForStockAvailableRows = async ({ productId, productAttributeId = 0, at
   return [];
 };
 
+const findMatchingStockRow = ({ rows = [], productId, productAttributeId = 0 }) => {
+  const normalizedProductId = Number.parseInt(productId, 10) || 0;
+  const normalizedAttrId = Number.parseInt(productAttributeId, 10) || 0;
+  const preferredShopId = CONSTANTS.ID_SHOP_DEFAULT || 1;
+
+  let stockRow = rows.find((item) => getXmlNumberValue(item?.id_product, 0) === normalizedProductId
+    && getXmlNumberValue(item?.id_product_attribute, 0) === normalizedAttrId
+    && getXmlNumberValue(item?.id_shop, preferredShopId) === preferredShopId);
+
+  if (!stockRow) {
+    stockRow = rows.find((item) => getXmlNumberValue(item?.id_product, 0) === normalizedProductId
+      && getXmlNumberValue(item?.id_product_attribute, 0) === normalizedAttrId);
+  }
+
+  return stockRow || null;
+};
+
+const getCurrentStockQuantity = async ({ productId, productAttributeId = 0 }) => {
+  const rows = await waitForStockAvailableRows({
+    productId,
+    productAttributeId,
+    attempts: 6,
+    delayMs: 300
+  });
+
+  const stockRow = findMatchingStockRow({ rows, productId, productAttributeId });
+  if (!stockRow) {
+    return null;
+  }
+
+  return {
+    stockId: getXmlScalarValue(stockRow?.id),
+    quantity: getXmlNumberValue(stockRow?.quantity, 0),
+    idShop: getXmlNumberValue(stockRow?.id_shop, CONSTANTS.ID_SHOP_DEFAULT),
+    idShopGroup: getXmlNumberValue(stockRow?.id_shop_group, CONSTANTS.ID_SHOP_GROUP)
+  };
+};
+
 const upsertStockAvailableQuantity = async ({ productId, productAttributeId = 0, quantity }) => {
   const rows = await waitForStockAvailableRows({
     productId,
@@ -411,17 +449,7 @@ const upsertStockAvailableQuantity = async ({ productId, productAttributeId = 0,
 
   const normalizedProductId = Number.parseInt(productId, 10) || 0;
   const normalizedAttrId = Number.parseInt(productAttributeId, 10) || 0;
-  // Prefer the row matching the default shop if multiple rows exist
-  const preferredShopId = CONSTANTS.ID_SHOP_DEFAULT || 1;
-  let stockRow = rows.find((item) => getXmlNumberValue(item?.id_product, 0) === normalizedProductId
-    && getXmlNumberValue(item?.id_product_attribute, 0) === normalizedAttrId
-    && getXmlNumberValue(item?.id_shop, preferredShopId) === preferredShopId);
-
-  if (!stockRow) {
-    // Fallback to any matching row (older behaviour)
-    stockRow = rows.find((item) => getXmlNumberValue(item?.id_product, 0) === normalizedProductId
-      && getXmlNumberValue(item?.id_product_attribute, 0) === normalizedAttrId);
-  }
+  const stockRow = findMatchingStockRow({ rows, productId: normalizedProductId, productAttributeId: normalizedAttrId });
 
   const currentQuantity = stockRow ? getXmlNumberValue(stockRow?.quantity, 0) : 0;
   const stockAvailableXML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -1709,7 +1737,7 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
             // CONDITION: Si etat === "dans le panier" OU vide, créer SEULEMENT le cart (pas la commande)
             if (normalizedStatus && normalizedStatus !== 'dans le panier') {
               // ÉTAPE 4: Créer la commande
-              const shouldCreateCancellationHistory = normalizedStatus === 'annule';
+              const shouldCreateCancellationHistory = normalizedStatus.startsWith('annul');
               const cancelledStateId = shouldCreateCancellationHistory
                 ? getExistingOrderStateId('annulé', orderStates)
                 : null;
@@ -1756,12 +1784,76 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
               }
 
               console.log(`✓ Commande créée: ${email} (Order ID: ${orderId})`);
-              
-              // NOTE: We no longer manually decrement stock here. We create the `cart`
-              // and then create the `order` with `id_cart`. Prestashop will update
-              // `stock_availables` automatically based on the cart when the order is
-              // confirmed. Avoid manual upserts/deltas here to prevent double movements.
-              console.log(`ℹ️ Stock will be adjusted by Prestashop for Order ID: ${orderId} (cartId: ${cartId})`);
+
+              // Enregistrer les mouvements via stock_deltas sans dupliquer la décrémentation finale:
+              // 1) snapshot quantité actuelle (déjà ajustée par PrestaShop),
+              // 2) appliquer stock_deltas,
+              // 3) restaurer la quantité snapshot.
+
+              /*
+              MODE SANS ENREGISTREMENT DE MOUVEMENTS (sans stock_deltas)
+
+              Pour désactiver complètement l'enregistrement des mouvements pendant la création de commande :
+
+              1) SUPPRIMER le bloc suivant dans importFile3 (après "Commande créée"):
+                - depuis:
+                  // Enregistrer les mouvements via stock_deltas sans dupliquer la décrémentation finale:
+                  for (const rowData of orderRows) {
+                    ...
+                  }
+                - jusqu'à la fin du for/catch qui log:
+                  "✓ Mouvement stock enregistré puis stock restauré..."
+
+              2) NE RIEN AJOUTER d'autre.
+                - PrestaShop continuera à ajuster le stock automatiquement via le couple cart + order.
+                - L'import garde son fonctionnement actuel sans duplication.
+
+              3) Optionnel (nettoyage):
+                - si non utilisés ailleurs, supprimer les helpers:
+                  - findMatchingStockRow
+                  - getCurrentStockQuantity
+                - garder applyStockDeltaMovement seulement si utile pour d'autres cas.
+              */
+              for (const rowData of orderRows) {
+                try {
+                  const quantityOrdered = Number.parseInt(rowData.productQuantity, 10) || 0;
+                  if (quantityOrdered <= 0) {
+                    continue;
+                  }
+
+                  const snapshot = await getCurrentStockQuantity({
+                    productId: rowData.productId,
+                    productAttributeId: rowData.productAttributeId || 0
+                  });
+
+                  if (!snapshot) {
+                    console.warn(`⚠️ Snapshot stock introuvable avant stock_deltas: prod=${rowData.productId}, attr=${rowData.productAttributeId || 0}`);
+                    continue;
+                  }
+
+                  const movementDelta = -Math.abs(quantityOrdered);
+                  const deltaApplied = await applyStockDeltaMovement({
+                    productId: rowData.productId,
+                    productAttributeId: rowData.productAttributeId || 0,
+                    delta: movementDelta
+                  });
+
+                  if (!deltaApplied) {
+                    continue;
+                  }
+
+                  await upsertStockAvailableQuantity({
+                    productId: rowData.productId,
+                    productAttributeId: rowData.productAttributeId || 0,
+                    quantity: snapshot.quantity
+                  });
+
+                  console.log(`✓ Mouvement stock enregistré puis stock restauré: prod=${rowData.productId}, attr=${rowData.productAttributeId || 0}, delta=${movementDelta}, restored=${snapshot.quantity}`);
+                } catch (movementError) {
+                  console.warn(`⚠️ Mouvement stock non bloquant en échec pour commande ${orderId}:`, movementError.message);
+                  results.errors.push(`Commande ${orderId}: mouvement stock non appliqué (${movementError.message})`);
+                }
+              }
 
               // Mise à jour des dates après insertion, sans toucher au statut
               try {
