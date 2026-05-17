@@ -35,6 +35,7 @@ const ProductDetails = () => {
           }
 
           formatted.description = desc;
+          formatted.stock = parseInt(formatted.stock, 10) || 0;
         }
 
         setProduct(formatted);
@@ -78,20 +79,37 @@ const ProductDetails = () => {
             <h1>{product.name}</h1>
             <p className="product-price">{product.price} €</p>
             {product.isNew && <span className="badge badge-new">Nouveau</span>}
+            
+            {/* Affichage du stock */}
+            <div className={`stock-badge ${product.stock > 10 ? 'in-stock' : product.stock > 0 ? 'low-stock' : 'out-of-stock'}`}>
+              {product.stock > 0 ? (
+                <>
+                  <span className="stock-status">En stock</span>
+                  <span className="stock-quantity">{product.stock} article{product.stock > 1 ? 's' : ''} disponible{product.stock > 1 ? 's' : ''}</span>
+                </>
+              ) : (
+                <>
+                  <span className="stock-status">Rupture de stock</span>
+                  <span className="stock-quantity">Actuellement indisponible</span>
+                </>
+              )}
+            </div>
+
             <div className="product-description" dangerouslySetInnerHTML={{ __html: product.description || 'Aucune description disponible.' }} />
 
             <div className="product-actions">
               <div className="quantity-selector">
-                <button onClick={() => setQuantity(Math.max(1, quantity - 1))}>−</button>
-                <input type="number" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))} min="1" />
-                <button onClick={() => setQuantity(quantity + 1)}>+</button>
+                <button onClick={() => setQuantity(Math.max(1, quantity - 1))} disabled={product.stock === 0}>−</button>
+                <input type="number" value={quantity} onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))} min="1" disabled={product.stock === 0} />
+                <button onClick={() => setQuantity(quantity + 1)} disabled={product.stock === 0}>+</button>
               </div>
 
               <button
                 className={`add-to-cart-btn ${addedToCart ? 'success' : ''}`}
                 onClick={handleAddToCart}
+                disabled={product.stock === 0}
               >
-                {addedToCart ? '✓ Ajouté au panier' : 'Ajouter au panier'}
+                {product.stock === 0 ? 'Rupture de stock' : addedToCart ? '✓ Ajouté au panier' : 'Ajouter au panier'}
               </button>
             </div>
 

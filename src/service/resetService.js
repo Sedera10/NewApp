@@ -96,11 +96,15 @@ export async function resetResource(resource) {
             } catch (error) {
                 const status = error?.response?.status;
 
-                if (status !== 404) {
+                if (status !== 404 && status !== 405) {
                     throw error;
                 }
 
-                console.warn(`Suppression ignorée pour ${resource}/${id} (route introuvable).`);
+                if (status === 405) {
+                    console.warn(`Suppression ignorée pour ${resource}/${id} (méthode DELETE non autorisée).`);
+                } else {
+                    console.warn(`Suppression ignorée pour ${resource}/${id} (route introuvable).`);
+                }
             }
         }
 

@@ -1,6 +1,163 @@
 import api from './api';
 import { xmlToJson } from './Util';
 
+const STOCK_HISTORY_KEY_PREFIX = 'stock_history_';
+
+const getBrowserStorage = () => {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return null;
+  }
+
+  return window.localStorage;
+};
+
+const getTodayKey = () => new Date().toISOString().slice(0, 10);
+
+const getStockHistoryStorageKey = (productId) => `${STOCK_HISTORY_KEY_PREFIX}${productId}`;
+
+const safeParseJson = (value, fallback) => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
+const getTextValue = (value) => (value && typeof value === 'object' && value['#text'] !== undefined)
+  ? value['#text']
+  : value;
+
+const getNumericValue = (value, fallback = 0) => {
+  const parsed = Number.parseInt(getTextValue(value), 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
+};
+
+const ensureArray = (value) => {
+  if (Array.isArray(value)) return value;
+  return value ? [value] : [];
+};
+
+const getAssociationStockIds = (product) => {
+  const stockNodes = ensureArray(product?.associations?.stock_availables?.stock_available || product?.associations?.stock_availables);
+  return stockNodes
+    .map((node) => getNumericValue(node?.id, null))
+    .filter((id) => id !== null);
+};
+
+const getAssociationCombinationIds = (product) => {
+  const comboNodes = ensureArray(product?.associations?.combinations?.combination || product?.associations?.combinations);
+  return comboNodes
+    .map((node) => getNumericValue(node?.id, null))
+    .filter((id) => id !== null);
+};
+
+const getVariantLabel = (product, combination) => {
+  const productReference = String(getTextValue(product?.reference) || '').trim();
+  const combinationReference = String(getTextValue(combination?.reference) || '').trim();
+
+  if (!combinationReference) {
+    return `Déclinaison ${getTextValue(combination?.id) || ''}`.trim();
+  }
+
+  if (productReference && combinationReference.startsWith(`${productReference}-`)) {
+    return combinationReference.slice(productReference.length + 1);
+  }
+
+  return combinationReference;
+};
+
+const buildStockBreakdown = (product, stockRows = [], combinationsById = {}) => {
+  const normalizedRows = ensureArray(stockRows);
+  const combinationIds = getAssociationCombinationIds(product);
+
+  if (!combinationIds.length) {
+    const baseRow = normalizedRows.find((row) => getNumericValue(row?.id_product_attribute, 0) === 0);
+    return [{
+      idProductAttribute: 0,
+      label: 'Produit',
+      quantity: getNumericValue(baseRow?.quantity, 0)
+    }];
+  }
+
+  return combinationIds.map((combinationId) => {
+    const stockRow = normalizedRows.find((row) => getNumericValue(row?.id_product_attribute, 0) === combinationId);
+    const combination = combinationsById[combinationId] || null;
+
+    return {
+      idProductAttribute: combinationId,
+      label: getVariantLabel(product, combination),
+      quantity: getNumericValue(stockRow?.quantity, 0)
+    };
+  });
+};
+
+const computeStockFromRows = (product, stockRows = []) => {
+  const normalizedRows = ensureArray(stockRows);
+  if (!normalizedRows.length) return 0;
+
+  const rowsWithAttr = normalizedRows.map((row) => ({
+    quantity: getNumericValue(row?.quantity, 0),
+    idProductAttribute: getNumericValue(row?.id_product_attribute, 0)
+  }));
+
+  const hasCombinations = getAssociationCombinationIds(product).length > 0;
+  if (hasCombinations) {
+    const combinationTotal = rowsWithAttr
+      .filter((row) => row.idProductAttribute > 0)
+      .reduce((sum, row) => sum + row.quantity, 0);
+
+    if (combinationTotal > 0) {
+      return combinationTotal;
+    }
+  }
+
+  const baseRow = rowsWithAttr.find((row) => row.idProductAttribute === 0);
+  if (baseRow) {
+    return baseRow.quantity;
+  }
+
+  return rowsWithAttr.reduce((sum, row) => sum + row.quantity, 0);
+};
+
+const upsertDailyStockEntry = (productId, nextQuantity, previousQuantity = null) => {
+  const storage = getBrowserStorage();
+  if (!storage) return [];
+
+  const key = getStockHistoryStorageKey(productId);
+  const history = safeParseJson(storage.getItem(key) || '[]', []);
+  const today = getTodayKey();
+  const currentPrevious = previousQuantity ?? (history.length ? getNumericValue(history[0]?.quantity, nextQuantity) : nextQuantity);
+
+  const entry = {
+    date: today,
+    quantity: nextQuantity,
+    previousQuantity: currentPrevious,
+    variation: nextQuantity - currentPrevious,
+    updatedAt: new Date().toISOString()
+  };
+
+  const existingIndex = history.findIndex((item) => item.date === today);
+  if (existingIndex >= 0) {
+    history[existingIndex] = {
+      ...history[existingIndex],
+      ...entry
+    };
+  } else {
+    history.unshift(entry);
+  }
+
+  storage.setItem(key, JSON.stringify(history));
+  return history;
+};
+
+const getStockHistory = (productId) => {
+  const storage = getBrowserStorage();
+  if (!storage) return [];
+
+  const key = getStockHistoryStorageKey(productId);
+  return safeParseJson(storage.getItem(key) || '[]', []);
+};
+
 export const productService = {
   // Fetch all products with full details and optional filters
   getAllProducts: async (filters = {}) => {
@@ -16,6 +173,60 @@ export const productService = {
       const jsonObj = xmlToJson(response.data);
       let products = jsonObj?.prestashop?.products?.product || [];
       if (!Array.isArray(products)) products = products ? [products] : [];
+
+      let stockRows = [];
+      let combinationsById = {};
+      try {
+        const stockResponse = await api.get('/stock_availables?display=full');
+        const stockJsonObj = xmlToJson(stockResponse.data);
+        stockRows = ensureArray(stockJsonObj?.prestashop?.stock_availables?.stock_available);
+      } catch (stockError) {
+        console.warn('Impossible de charger stock_availables, fallback sur quantity produit.', stockError?.message || stockError);
+      }
+
+      try {
+        const combinationsResponse = await api.get('/combinations?display=full&limit=1000');
+        const combinationsJsonObj = xmlToJson(combinationsResponse.data);
+        const combinations = ensureArray(combinationsJsonObj?.prestashop?.combinations?.combination);
+        combinationsById = combinations.reduce((acc, item) => {
+          const combinationId = getNumericValue(item?.id, null);
+          if (combinationId !== null) {
+            acc[combinationId] = item;
+          }
+          return acc;
+        }, {});
+      } catch (combinationError) {
+        console.warn('Impossible de charger les combinaisons pour détail du stock.', combinationError?.message || combinationError);
+      }
+
+      const stockRowsById = stockRows.reduce((acc, row) => {
+        const stockId = getNumericValue(row?.id, null);
+        if (stockId !== null) {
+          acc[stockId] = row;
+        }
+        return acc;
+      }, {});
+
+      products = products.map((product) => {
+        const associationStockIds = getAssociationStockIds(product);
+        const rowsForProduct = associationStockIds
+          .map((id) => stockRowsById[id])
+          .filter(Boolean);
+
+        const breakdown = rowsForProduct.length
+          ? buildStockBreakdown(product, rowsForProduct, combinationsById)
+          : [{ idProductAttribute: 0, label: 'Produit', quantity: getNumericValue(product?.quantity, 0) }];
+
+        const computedStock = rowsForProduct.length
+          ? computeStockFromRows(product, rowsForProduct)
+          : getNumericValue(product?.quantity, 0);
+
+        return {
+          ...product,
+          computed_stock: computedStock,
+          stock_breakdown: breakdown
+        };
+      });
       
       // Post-fetch filtering for categories (using all associated categories, not just the default one)
       if (filters.category) {
@@ -75,7 +286,41 @@ export const productService = {
     try {
       const response = await api.get(`/products/${id}?display=full`);
       const jsonObj = xmlToJson(response.data);
-      return jsonObj?.prestashop?.product || null;
+      const product = jsonObj?.prestashop?.product || null;
+      if (!product) return null;
+
+      try {
+        const stockResponse = await api.get(`/stock_availables?display=full&filter[id_product]=[${id}]`);
+        const stockJsonObj = xmlToJson(stockResponse.data);
+        const stockRows = ensureArray(stockJsonObj?.prestashop?.stock_availables?.stock_available);
+
+        // try to load combinations for labels
+        let combinationsById = {};
+        try {
+          const combinationsResponse = await api.get(`/combinations?display=full&filter[id_product]=[${id}]`);
+          const combinationsJsonObj = xmlToJson(combinationsResponse.data);
+          const combinations = ensureArray(combinationsJsonObj?.prestashop?.combinations?.combination);
+          combinationsById = combinations.reduce((acc, item) => {
+            const cid = getNumericValue(item?.id, null);
+            if (cid !== null) acc[cid] = item;
+            return acc;
+          }, {});
+        } catch (e) {
+          // ignore
+        }
+
+        return {
+          ...product,
+          computed_stock: computeStockFromRows(product, stockRows),
+          stock_breakdown: buildStockBreakdown(product, stockRows, combinationsById)
+        };
+      } catch {
+        return {
+          ...product,
+          computed_stock: getNumericValue(product?.quantity, 0),
+          stock_breakdown: [{ idProductAttribute: 0, label: 'Produit', quantity: getNumericValue(product?.quantity, 0) }]
+        };
+      }
     } catch (error) {
       console.error(`Error fetching product ${id}`, error);
       return null;
@@ -148,11 +393,119 @@ export const productService = {
       id,
       name,
       price,
+      stock: getNumericValue(p.computed_stock, getNumericValue(p.quantity, 0)),
       isNew,
       marker,
       discount: null, // Depending on specific fields
       image,
       id_category_default: getText(p.id_category_default)
     };
+  },
+
+  // Mettre à jour le stock d'un produit
+  updateProductStock: async (productId, newQuantity) => {
+    try {
+      if (!productId && productId !== 0) {
+        throw new Error('Identifiant produit manquant');
+      }
+
+      // Récupérer le produit complet avec tous ses champs
+      const rawProduct = await productService.getProductById(productId);
+      if (!rawProduct) {
+        throw new Error(`Produit ${productId} non trouvé`);
+      }
+
+      // Récupérer la stock_available pour ce produit
+      const response = await api.get(`/stock_availables?display=full&filter[id_product]=[${productId}]`);
+      const jsonObj = xmlToJson(response.data);
+      
+      let stockAvailable = jsonObj?.prestashop?.stock_availables?.stock_available;
+      if (!Array.isArray(stockAvailable)) {
+        stockAvailable = stockAvailable ? [stockAvailable] : [];
+      }
+
+      if (stockAvailable.length === 0) {
+        throw new Error(`Stock non trouvé pour le produit ${productId}`);
+      }
+
+      // Mettre à jour chaque stock_available (il peut y en avoir plusieurs pour les combinaisons)
+      const getFieldValue = (obj, field) => {
+        if (!obj) return undefined;
+        const val = obj[field];
+        return val?.value !== undefined ? val.value : val;
+      };
+
+      // Pour simplifier, on met à jour le premier (ou tous les stocks du produit base)
+      const stockToUpdate = stockAvailable.find((item) => getNumericValue(item?.id_product_attribute, 0) === 0) || stockAvailable[0];
+      const stockId = getFieldValue(stockToUpdate, 'id');
+      const previousQuantity = getNumericValue(stockToUpdate?.quantity, newQuantity);
+
+      if (!stockId) {
+        throw new Error('ID de stock non trouvé');
+      }
+
+      // Construire le XML de mise à jour
+      const updateXML = `<?xml version="1.0" encoding="UTF-8"?>
+  <prestashop>
+    <stock_available>
+      <id>${stockId}</id>
+      <id_product>${productId}</id_product>
+      <id_product_attribute>${getFieldValue(stockToUpdate, 'id_product_attribute') || 0}</id_product_attribute>
+      <quantity>${newQuantity}</quantity>
+      <physical_quantity>${getFieldValue(stockToUpdate, 'physical_quantity') || newQuantity}</physical_quantity>
+      <reserved_quantity>${getFieldValue(stockToUpdate, 'reserved_quantity') || 0}</reserved_quantity>
+      <depends_on_stock>0</depends_on_stock>
+      <out_of_stock>${newQuantity === 0 ? 1 : 0}</out_of_stock>
+    </stock_available>
+  </prestashop>`;
+
+      const updateResponse = await api.put(`/stock_availables/${stockId}`, updateXML);
+
+      upsertDailyStockEntry(productId, newQuantity, previousQuantity);
+      return updateResponse.data;
+    } catch (error) {
+      throw new Error(`Erreur mise à jour stock: ${error.message}`);
+    }
+  },
+
+  // Retourne l'évolution journalière du stock d'un produit
+  getStockHistory: (productId) => {
+    return getStockHistory(productId);
+  },
+
+  // Agrège l'historique local en une vue par jour
+  getDailyStockEvolution: (productId, currentQuantity = null) => {
+    const history = getStockHistory(productId)
+      .map((entry) => ({
+        ...entry,
+        date: entry.date || entry.updatedAt?.slice(0, 10) || getTodayKey(),
+        quantity: getNumericValue(entry.quantity, 0),
+        previousQuantity: getNumericValue(entry.previousQuantity, 0),
+        variation: getNumericValue(entry.variation, 0)
+      }))
+      .sort((a, b) => new Date(b.updatedAt || b.date) - new Date(a.updatedAt || a.date));
+
+    if (!history.length && currentQuantity !== null && currentQuantity !== undefined) {
+      return [{
+        date: getTodayKey(),
+        quantity: getNumericValue(currentQuantity, 0),
+        previousQuantity: getNumericValue(currentQuantity, 0),
+        variation: 0,
+        updatedAt: new Date().toISOString(),
+        source: 'current-stock'
+      }];
+    }
+
+    const dailyMap = new Map();
+    history.forEach((entry) => {
+      const key = entry.date;
+      const existing = dailyMap.get(key);
+
+      if (!existing || new Date(entry.updatedAt || entry.date) > new Date(existing.updatedAt || existing.date)) {
+        dailyMap.set(key, entry);
+      }
+    });
+
+    return Array.from(dailyMap.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
   }
 };

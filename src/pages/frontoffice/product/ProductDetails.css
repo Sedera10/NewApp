@@ -69,6 +69,65 @@
   margin: 0;
 }
 
+/* Stock Badge */
+.stock-badge {
+  padding: 12px 16px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.stock-badge.in-stock {
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+}
+
+.stock-badge.low-stock {
+  background-color: #fff3cd;
+  border: 1px solid #ffeeba;
+}
+
+.stock-badge.out-of-stock {
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+}
+
+.stock-status {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.stock-badge.in-stock .stock-status {
+  color: #155724;
+}
+
+.stock-badge.low-stock .stock-status {
+  color: #856404;
+}
+
+.stock-badge.out-of-stock .stock-status {
+  color: #721c24;
+}
+
+.stock-quantity {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.stock-badge.in-stock .stock-quantity {
+  color: #0c5420;
+}
+
+.stock-badge.low-stock .stock-quantity {
+  color: #664d03;
+}
+
+.stock-badge.out-of-stock .stock-quantity {
+  color: #5f1d2f;
+}
+
 .product-description {
   margin-top: 20px;
   color: #555;
@@ -104,6 +163,12 @@
   background: #f0f0f0;
 }
 
+.quantity-selector button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background: #eee;
+}
+
 .quantity-selector input {
   width: 50px;
   text-align: center;
@@ -116,6 +181,12 @@
 
 .quantity-selector input:focus {
   outline: none;
+}
+
+.quantity-selector input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background: #f5f5f5;
 }
 
 .add-to-cart-btn {
@@ -131,8 +202,13 @@
   transition: all 0.3s;
 }
 
-.add-to-cart-btn:hover {
+.add-to-cart-btn:hover:not(:disabled) {
   background-color: #444;
+}
+
+.add-to-cart-btn:disabled {
+  background-color: #999;
+  cursor: not-allowed;
 }
 
 .add-to-cart-btn.success {

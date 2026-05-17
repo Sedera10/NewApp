@@ -4,7 +4,8 @@ import {
   MdWarning,
   MdDashboard,
   MdSettings, 
-  MdKeyboardCommandKey
+  MdKeyboardCommandKey,
+  MdInventory2
 } from 'react-icons/md';
 import './Sidebar.css';
 import logoUrl from '/logo.png'
@@ -57,6 +58,15 @@ export default function Sidebar({ isOpen }) {
                 <MdWarning size={20} />
               </div>
               <span>Réinitialisation</span>
+            </NavLink>
+          </li>
+
+          <li className="nav-item">
+            <NavLink to="/mystore/admin/stock" className="nav-link text-dark d-flex align-items-center mb-1">
+              <div className="icon-box me-3 d-flex align-items-center justify-content-center">
+                <MdInventory2 size={20} />
+              </div>
+              <span>Gestion du Stock</span>
             </NavLink>
           </li>
 

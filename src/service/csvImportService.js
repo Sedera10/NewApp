@@ -51,6 +51,7 @@ const CONSTANTS = {
   ID_LANG: 1, // FR
   ID_COUNTRY: 8, // France
   ID_SHOP_DEFAULT: 1,
+  ID_SHOP_GROUP: 1,
   ID_PARENT_CATEGORY: 2, // Racine
   PAYMENT_MODULE: 'ps_cashondelivery',
   PAYMENT_LABEL: 'Paiement a la livraison',
@@ -276,6 +277,21 @@ const normalizeKey = (key) => {
   return key?.trim().toLowerCase().replace(/\s+/g, '') || '';
 };
 
+const getXmlScalarValue = (value) => {
+  if (value && typeof value === 'object') {
+    if (value['#text'] !== undefined) return value['#text'];
+    if (value.value !== undefined) return value.value;
+  }
+  return value;
+};
+
+const getXmlNumberValue = (value, fallback = 0) => {
+  const parsed = Number.parseInt(getXmlScalarValue(value), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const extractCategories = (csvData) => {
   const categories = {};
   csvData.forEach(row => {
@@ -299,6 +315,218 @@ const extractTaxes = (csvData) => {
   return taxes;
 };
 
+/**
+ * DEBUG: Fonction pour tracer le stock d'un produit à partir des stock_availables
+ */
+export const debugGetProductStock = async (productId, productReference = '', productAttributeId = null) => {
+  try {
+    const allStockAvailables = await prestashopApi.getResources('stock_availables', null, null, {
+      display: 'full'
+    });
+
+    const targetProductId = Number.parseInt(productId, 10) || 0;
+    const targetAttrId = productAttributeId === null ? 0 : Number.parseInt(productAttributeId, 10) || 0;
+    const matchingStockAvailables = allStockAvailables.filter(stockRow => {
+      const stockProductId = getXmlNumberValue(stockRow?.id_product, 0);
+      const stockAttrId = getXmlNumberValue(stockRow?.id_product_attribute, 0);
+      return stockProductId === targetProductId && stockAttrId === targetAttrId;
+    });
+
+    const stockRow = matchingStockAvailables[0];
+    const quantity = stockRow ? getXmlNumberValue(stockRow?.quantity, 0) : null;
+
+    console.log(
+      `📦 STOCK DEBUG: Produit ${productReference} (ID: ${productId}, Attr: ${targetAttrId}) - Quantité via stock_availables: ${quantity}`
+    );
+
+    if (quantity === null) {
+      const allStockDeltas = await prestashopApi.getResources('stock_deltas', null, null, { display: 'full' });
+      const matchingDeltas = allStockDeltas.filter(delta => {
+        const deltaProductId = getXmlNumberValue(delta?.id_product, 0);
+        const deltaAttrId = getXmlNumberValue(delta?.id_product_attribute, 0);
+        return deltaProductId === Number.parseInt(productId, 10) && deltaAttrId === targetAttrId;
+      });
+
+      const deltaQuantity = matchingDeltas.reduce((sum, delta) => {
+        return sum + getXmlNumberValue(delta?.delta, 0);
+      }, 0);
+
+      console.log(`ℹ️ STOCK DEBUG: aucun stock_availables trouvé pour ${productReference} (ID: ${productId}, Attr: ${targetAttrId}), fallback stock_deltas = ${deltaQuantity}`);
+
+      return {
+        quantity: deltaQuantity,
+        movements: matchingDeltas.length,
+        lastMovementAt: matchingDeltas[0] ? getXmlScalarValue(matchingDeltas[0]?.date_add) : null
+      };
+    }
+
+    return {
+      quantity,
+      movements: matchingStockAvailables.length,
+      lastMovementAt: stockRow ? getXmlScalarValue(stockRow?.date_upd) : null
+    };
+  } catch (error) {
+    console.error(`❌ STOCK DEBUG ERROR: ${error.message}`);
+    return null;
+  }
+};
+
+const getStockAvailableRows = async (productId, productAttributeId = null) => {
+  const params = {
+    display: 'full',
+    'filter[id_product]': `[${productId}]`
+  };
+
+  if (productAttributeId !== null && productAttributeId !== undefined) {
+    params['filter[id_product_attribute]'] = `[${productAttributeId}]`;
+  }
+
+  return prestashopApi.getResources('stock_availables', null, null, {
+    ...params
+  });
+};
+
+const waitForStockAvailableRows = async ({ productId, productAttributeId = 0, attempts = 5, delayMs = 250 }) => {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const rows = await getStockAvailableRows(productId, productAttributeId);
+    if (rows && rows.length > 0) {
+      return rows;
+    }
+
+    if (attempt < attempts) {
+      await wait(delayMs);
+    }
+  }
+
+  return [];
+};
+
+const upsertStockAvailableQuantity = async ({ productId, productAttributeId = 0, quantity }) => {
+  const rows = await waitForStockAvailableRows({
+    productId,
+    productAttributeId,
+    attempts: 6,
+    delayMs: 300
+  });
+
+  const normalizedProductId = Number.parseInt(productId, 10) || 0;
+  const normalizedAttrId = Number.parseInt(productAttributeId, 10) || 0;
+  // Prefer the row matching the default shop if multiple rows exist
+  const preferredShopId = CONSTANTS.ID_SHOP_DEFAULT || 1;
+  let stockRow = rows.find((item) => getXmlNumberValue(item?.id_product, 0) === normalizedProductId
+    && getXmlNumberValue(item?.id_product_attribute, 0) === normalizedAttrId
+    && getXmlNumberValue(item?.id_shop, preferredShopId) === preferredShopId);
+
+  if (!stockRow) {
+    // Fallback to any matching row (older behaviour)
+    stockRow = rows.find((item) => getXmlNumberValue(item?.id_product, 0) === normalizedProductId
+      && getXmlNumberValue(item?.id_product_attribute, 0) === normalizedAttrId);
+  }
+
+  const currentQuantity = stockRow ? getXmlNumberValue(stockRow?.quantity, 0) : 0;
+  const stockAvailableXML = `<?xml version="1.0" encoding="UTF-8"?>
+<prestashop>
+  <stock_available>
+    <id_product>${productId}</id_product>
+    <id_product_attribute>${normalizedAttrId}</id_product_attribute>
+    <quantity>${quantity}</quantity>
+    <id_shop>${CONSTANTS.ID_SHOP_DEFAULT}</id_shop>
+    <id_shop_group>${CONSTANTS.ID_SHOP_GROUP}</id_shop_group>
+    <depends_on_stock>0</depends_on_stock>
+    <out_of_stock>${quantity === 0 ? 1 : 0}</out_of_stock>
+  </stock_available>
+</prestashop>`;
+
+  console.log(`📦 STOCK AVAILABLE: prod=${productId}, attr=${normalizedAttrId}, current=${currentQuantity}, target=${quantity}`);
+  if (stockRow) {
+    const stockId = getXmlScalarValue(stockRow?.id);
+    if (!stockId) {
+      throw new Error(`ID stock_available manquant pour produit ${productId} / attr ${productAttributeId}`);
+    }
+
+    // Ensure the <id> is present and we keep shop context in the update
+    let updatePayload = stockAvailableXML.replace('<stock_available>', `<stock_available>\n    <id>${stockId}</id>`);
+
+    // If existing row contains explicit id_shop/id_shop_group values, prefer those to avoid scope mismatch
+    const existingShopId = getXmlNumberValue(stockRow?.id_shop, null);
+    const existingShopGroup = getXmlNumberValue(stockRow?.id_shop_group, null);
+    if (existingShopId !== null) {
+      updatePayload = updatePayload.replace('<id_shop>' + (CONSTANTS.ID_SHOP_DEFAULT || '') + '</id_shop>', `<id_shop>${existingShopId}</id_shop>`);
+    }
+    if (existingShopGroup !== null) {
+      updatePayload = updatePayload.replace('<id_shop_group>' + (CONSTANTS.ID_SHOP_GROUP || '') + '</id_shop_group>', `<id_shop_group>${existingShopGroup}</id_shop_group>`);
+    }
+    try {
+      await prestashopApi.updateResource('stock_availables', stockId, updatePayload);
+      return { stockId, currentQuantity, quantity, updated: true, skipped: false };
+    } catch (error) {
+      console.warn(`⚠️ Update stock_available échoué pour prod=${productId}, attr=${normalizedAttrId}: ${error.message}`);
+      if (error?.response?.data) {
+        console.warn(`   Réponse stock_available:`, typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data));
+      }
+      throw error;
+    }
+  }
+
+  console.log(`ℹ️ STOCK AVAILABLE: aucune ligne existante pour prod=${productId}, attr=${normalizedAttrId} après attente/retry (POST non autorisé sur cette API).`);
+  return { stockId: null, currentQuantity, quantity, updated: false, skipped: true };
+};
+
+const applyStockDeltaMovement = async ({ productId, productAttributeId = 0, delta }) => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
+  <stock_delta>
+    <id_product>${productId}</id_product>
+    <id_product_attribute>${productAttributeId}</id_product_attribute>
+    <delta>${delta}</delta>
+  </stock_delta>
+</prestashop>`;
+
+  console.log(`📦 STOCK DELTA: prod=${productId}, attr=${productAttributeId}, delta=${delta}`);
+  try {
+    await prestashopApi.createResource('stock_deltas', xml);
+    console.log(`✓ STOCK DELTA appliqué via stock_deltas: prod=${productId}, attr=${productAttributeId}, delta=${delta}`);
+    return true;
+  } catch (error) {
+    const errorBody = error?.response?.data;
+    console.warn(`⚠️ Échec stock_deltas pour prod=${productId}, attr=${productAttributeId}: ${error.message}`);
+    if (errorBody) {
+      console.warn(`   Réponse module:`, typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody));
+    }
+    return false;
+  }
+};
+
+/**
+ * Crée une ligne stock_available pour un produit/combinaison
+ */
+const createStockAvailableRow = async ({ productId, productAttributeId = 0, quantity = 0 }) => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<prestashop>
+  <stock_available>
+    <id_product>${productId}</id_product>
+    <id_product_attribute>${productAttributeId}</id_product_attribute>
+    <quantity>${quantity}</quantity>
+    <depends_on_stock>0</depends_on_stock>
+    <out_of_stock>${quantity === 0 ? 1 : 0}</out_of_stock>
+  </stock_available>
+</prestashop>`;
+
+  console.log(`📦 CRÉER STOCK_AVAILABLE: prod=${productId}, attr=${productAttributeId}, qty=${quantity}`);
+  try {
+    const response = await prestashopApi.createResource('stock_availables', xml);
+    const stockId = response.stock_available?.id;
+    console.log(`✓ STOCK_AVAILABLE créé: prod=${productId}, attr=${productAttributeId}, id=${stockId}`);
+    return { stockId, created: true };
+  } catch (error) {
+    console.warn(`⚠️ Échec création stock_available pour prod=${productId}, attr=${productAttributeId}: ${error.message}`);
+    if (error?.response?.data) {
+      console.warn(`   Réponse:`, typeof error.response.data === 'string' ? error.response.data : JSON.stringify(error.response.data));
+    }
+    return { stockId: null, created: false, error: error.message };
+  }
+};
+
 
 export const importFile1 = async (csvFile, onProgress = () => {}) => {
   const results = {
@@ -307,6 +535,8 @@ export const importFile1 = async (csvFile, onProgress = () => {}) => {
     taxRulesGroups: [],
     taxRules: [],
     products: [],
+    stocks: [],
+    missingStocks: [],
     errors: [],
     summary: {}
   };
@@ -507,6 +737,27 @@ export const importFile1 = async (csvFile, onProgress = () => {}) => {
         const response = await prestashopApi.createResource('products', xml);
         const productId = response.product?.id;
 
+        if (!productId) {
+          throw new Error(`Pas d'ID retourné pour le produit ${productData.reference}`);
+        }
+
+        // 🔍 VÉRIFIER si les stock_available ont été auto-créés par PrestaShop
+        console.log(`\n📋 === VÉRIFICATION STOCK_AVAILABLE APRÈS CRÉATION PRODUIT ${productData.reference} (ID ${productId}) ===`);
+        try {
+          const existingStocks = await getStockAvailableRows(productId, null);
+          console.log(`📊 Stock_availables trouvés pour produit ${productId}:`, JSON.stringify(existingStocks, null, 2));
+          if (existingStocks && existingStocks.length > 0) {
+            console.log(`✅ PrestaShop A auto-créé ${existingStocks.length} stock_available(s) pour ce produit`);
+          } else {
+            console.warn(`⚠️ PrestaShop N'a PAS auto-créé de stock_available pour ce produit`);
+          }
+        } catch (err) {
+          console.error(`❌ Erreur vérification stock_available: ${err.message}`);
+        }
+        console.log(`=== FIN VÉRIFICATION ===\n`);
+
+        console.log(`ℹ️ Aucun POST stock_available effectué (non autorisé). Lignes auto-créées vérifiées ci-dessus.`);
+
         results.products.push({
           reference: productData.reference,
           name: productData.nom,
@@ -549,6 +800,9 @@ export const importFile1 = async (csvFile, onProgress = () => {}) => {
       successTaxRules: results.taxRules.filter(t => t.status === 'success').length,
       totalProducts: results.products.length,
       successProducts: results.products.filter(p => p.status === 'success').length,
+      totalStocks: results.stocks.length,
+      successStocks: results.stocks.filter(s => s.status === 'success').length,
+      totalMissingStocks: results.missingStocks.length,
       totalErrors: results.errors.length
     };
 
@@ -670,6 +924,7 @@ export const importFile2 = async (csvFile, file1Results, onProgress = () => {}) 
     attributes: [],
     combinations: [],
     stocks: [],
+    missingStocks: [],
     errors: [],
     summary: {}
   };
@@ -805,15 +1060,51 @@ export const importFile2 = async (csvFile, file1Results, onProgress = () => {}) 
 
         // Cas 1: Produit SANS variante
         if (!specificite || !valeur) {
-          // Juste mettre à jour le stock du produit
-          results.stocks.push({
-            reference,
-            idProduct,
-            type: 'product',
-            quantity: stock,
-            status: 'pending'
-          });
-          console.log(`✓ Produit sans variante: ${reference} stock=${stock}`);
+          // 🔍 VÉRIFIER puis METTRE À JOUR la ligne stock_available auto-créée
+          console.log(`\n📋 === VÉRIFICATION STOCK_AVAILABLE APRÈS CRÉATION PRODUIT ${reference} (ID ${idProduct}) ===`);
+          try {
+            const existingProductStocks = await getStockAvailableRows(idProduct, 0);
+            console.log(`📊 Stock_availables trouvés pour produit ${idProduct}:`, JSON.stringify(existingProductStocks, null, 2));
+            if (existingProductStocks && existingProductStocks.length > 0) {
+              console.log(`✅ PrestaShop A auto-créé ${existingProductStocks.length} stock_available(s) pour ce produit`);
+              const updateResult = await upsertStockAvailableQuantity({
+                productId: idProduct,
+                productAttributeId: 0,
+                quantity: stock
+              });
+
+              results.stocks.push({
+                reference,
+                idProduct,
+                type: 'product',
+                quantity: stock,
+                stockId: updateResult.stockId,
+                status: updateResult.updated ? 'success' : 'pending'
+              });
+              console.log(`✓ Stock mis à jour pour ${reference}: cible=${stock}, ancien=${updateResult.currentQuantity}`);
+            } else {
+              console.warn(`⚠️ PrestaShop N'a PAS auto-créé de stock_available pour ce produit`);
+              results.stocks.push({
+                reference,
+                idProduct,
+                type: 'product',
+                quantity: stock,
+                status: 'pending'
+              });
+              results.missingStocks.push({ reference, idProduct, idProductAttribute: 0, desiredQuantity: stock, currentQuantity: 0 });
+            }
+          } catch (err) {
+            console.error(`❌ Erreur vérification stock_available: ${err.message}`);
+            results.stocks.push({
+              reference,
+              idProduct,
+              type: 'product',
+              quantity: stock,
+              status: 'error'
+            });
+            results.errors.push(`Stock produit '${reference}': ${err.message}`);
+          }
+          console.log(`=== FIN VÉRIFICATION ===\n`);
           continue;
         }
 
@@ -860,15 +1151,54 @@ export const importFile2 = async (csvFile, file1Results, onProgress = () => {}) 
           status: 'success'
         });
 
-        // Ajouter le stock de la combinaison
-        results.stocks.push({
-          reference,
-          idProduct,
-          type: 'combination',
-          id_product_attribute: combinationId,
-          quantity: stock,
-          status: 'pending'
-        });
+        // 🔍 VÉRIFIER puis METTRE À JOUR la ligne stock_available auto-créée pour la combinaison
+        console.log(`\n📋 === VÉRIFICATION STOCK_AVAILABLE APRÈS CRÉATION COMBINAISON ${reference}-${valeur} (ID ${combinationId}) ===`);
+        try {
+          const existingCombinationStocks = await getStockAvailableRows(idProduct, combinationId);
+          console.log(`📊 Stock_availables trouvés pour combinaison ${combinationId}:`, JSON.stringify(existingCombinationStocks, null, 2));
+          if (existingCombinationStocks && existingCombinationStocks.length > 0) {
+            console.log(`✅ PrestaShop A auto-créé ${existingCombinationStocks.length} stock_available(s) pour cette combinaison`);
+            const updateResult = await upsertStockAvailableQuantity({
+              productId: idProduct,
+              productAttributeId: combinationId,
+              quantity: stock
+            });
+
+            results.stocks.push({
+              reference: `${reference}-${valeur}`,
+              idProduct,
+              type: 'combination',
+              id_product_attribute: combinationId,
+              quantity: stock,
+              stockId: updateResult.stockId,
+              status: updateResult.updated ? 'success' : 'pending'
+            });
+            console.log(`✓ Stock mis à jour pour ${reference}-${valeur}: cible=${stock}, ancien=${updateResult.currentQuantity}`);
+          } else {
+            console.warn(`⚠️ PrestaShop N'a PAS auto-créé de stock_available pour cette combinaison`);
+            results.stocks.push({
+              reference: `${reference}-${valeur}`,
+              idProduct,
+              type: 'combination',
+              id_product_attribute: combinationId,
+              quantity: stock,
+              status: 'pending'
+            });
+            results.missingStocks.push({ reference: `${reference}-${valeur}`, idProduct, idProductAttribute: combinationId, desiredQuantity: stock, currentQuantity: 0 });
+          }
+        } catch (err) {
+          console.error(`❌ Erreur vérification stock_available: ${err.message}`);
+          results.stocks.push({
+            reference: `${reference}-${valeur}`,
+            idProduct,
+            type: 'combination',
+            id_product_attribute: combinationId,
+            quantity: stock,
+            status: 'error'
+          });
+          results.errors.push(`Stock combinaison '${reference}-${valeur}': ${err.message}`);
+        }
+        console.log(`=== FIN VÉRIFICATION ===\n`);
 
         onProgress?.({
           step: 'combinations',
@@ -884,97 +1214,23 @@ export const importFile2 = async (csvFile, file1Results, onProgress = () => {}) 
     }
 
     // ============================================
-    // 4. GÉRER LES STOCKS
+    // 4. VÉRIFIER LES STOCKS (optionnel - juste pour logs)
     // ============================================
-    onProgress?.({ step: 'stocks', message: 'Mise à jour des stocks...' });
+    onProgress?.({ step: 'stocks', message: 'Vérification des stocks...' });
 
-    // Récupérer tous les stock_availables une seule fois
-    const allStockAvailables = await prestashopApi.getResources('stock_availables', null, null, {
-      display: 'full'
-    });
-
-    console.log(`DEBUG STOCK: Total stock_availables: ${allStockAvailables.length}`);
-
-    const getFieldValue = (obj, field) => {
-      if (!obj) return undefined;
-      const val = obj[field];
-      return val?.value !== undefined ? val.value : val;
-    };
-
+    console.log(`DEBUG STOCK: Total stocks créés: ${results.stocks.filter(s => s.status === 'success').length}`);
+    
+    // Les stocks_available ont déjà été créés avec les bonnes quantités
+    // On les marque simplement comme succès
     for (const stock of results.stocks) {
-      try {
-        if (stock.status !== 'pending') continue;
-
-        const idProductAttribute = stock.type === 'product' ? 0 : stock.id_product_attribute;
-
-        // Chercher dans ps_stock_available
-        const existingStockAvailable = allStockAvailables.find(s => {
-          const sIdProduct = getFieldValue(s, 'id_product');
-          const sIdAttr = getFieldValue(s, 'id_product_attribute');
-
-          return parseInt(sIdProduct) === parseInt(stock.idProduct) &&
-                 parseInt(sIdAttr) === parseInt(idProductAttribute);
-        });
-
-        if (!existingStockAvailable) {
-          throw new Error(`Stock_available non trouvé pour ${stock.reference} (id_product: ${stock.idProduct}, id_product_attribute: ${idProductAttribute})`);
-        }
-
-        // Mettre à jour ps_stock_available avec TOUS les champs existants + modifications
-        const stockFields = [
-          'id',
-          'id_product',
-          'id_product_attribute',
-          'id_shop',
-          'id_shop_group',
-          'quantity',
-          'physical_quantity',
-          'reserved_quantity',
-          'depends_on_stock',
-          'out_of_stock'
-        ];
-
-        let updateAvailableXML = `<?xml version="1.0" encoding="UTF-8"?>
-<prestashop>
-  <stock_available>`;
-
-        for (const field of stockFields) {
-          let value;
-
-          if (field === 'quantity') {
-            // Mettre à jour la quantité
-            value = stock.quantity;
-          } else if (field === 'depends_on_stock') {
-            // Mettre à jour depends_on_stock à 0
-            value = 0;
-          } else if (field === 'id') {
-            // Toujours inclure l'ID
-            value = existingStockAvailable.id;
-          } else {
-            // Récupérer depuis le stock existant
-            value = getFieldValue(existingStockAvailable, field);
-          }
-
-          if (value !== undefined && value !== null) {
-            updateAvailableXML += `
-    <${field}>${value}</${field}>`;
-          }
-        }
-
-        updateAvailableXML += `
-  </stock_available>
-</prestashop>`;
-
-        console.log(`DEBUG STOCK: UPDATE ps_stock_available ID ${existingStockAvailable.id}: ${stock.reference} = ${stock.quantity}`);
-        console.log(`DEBUG STOCK: XML complet:`, updateAvailableXML);
-        await prestashopApi.updateResource('stock_availables', existingStockAvailable.id, updateAvailableXML);
-        console.log(`✓ Stock mis à jour: ${stock.reference} = ${stock.quantity}`);
-        stock.status = 'success';
-      } catch (error) {
-        stock.status = 'error';
-        results.errors.push(`Stock '${stock.reference}': ${error.message}`);
+      if (stock.status === 'success') {
+        console.log(`✓ Stock créé correctement: ${stock.reference} (quantity=${stock.quantity})`);
+      } else if (stock.status === 'error') {
+        console.warn(`⚠️ Stock en erreur: ${stock.reference}`);
       }
     }
+
+    // No need for stock update phase anymore - stocks created with correct quantities
 
     // ============================================
     // RÉSUMÉ
@@ -1403,6 +1659,11 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
               continue;
             }
 
+            console.log(`📋 DEBUG File3: Panier pour '${email}' - Articles:`, cartItems.map(ci => ({
+              id_product: ci.id_product,
+              quantity: ci.quantity
+            })));
+
             const cartXML = buildCartXML({
               id_customer: customerId,
               id_address_delivery: addressId,
@@ -1430,6 +1691,17 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
 
             if (!cartId) {
               throw new Error(`Pas d'ID retourné pour le panier`);
+            }
+
+            console.log(`✓ Cart créé: ${email} (Cart ID: ${cartId})`);
+            
+            // DEBUG: Vérifier le stock après création du cart
+            for (const item of cartItems) {
+              const stockAfterCart = await debugGetProductStock(
+                item.id_product,
+                `Cart check for product ${item.id_product}`,
+                item.id_product_attribute || 0
+              );
             }
 
             const normalizedStatus = normalizeStatusLabel(etat);
@@ -1482,6 +1754,14 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
               if (!orderId) {
                 throw createValidationError(`Pas d'ID retourné pour la commande`);
               }
+
+              console.log(`✓ Commande créée: ${email} (Order ID: ${orderId})`);
+              
+              // NOTE: We no longer manually decrement stock here. We create the `cart`
+              // and then create the `order` with `id_cart`. Prestashop will update
+              // `stock_availables` automatically based on the cart when the order is
+              // confirmed. Avoid manual upserts/deltas here to prevent double movements.
+              console.log(`ℹ️ Stock will be adjusted by Prestashop for Order ID: ${orderId} (cartId: ${cartId})`);
 
               // Mise à jour des dates après insertion, sans toucher au statut
               try {

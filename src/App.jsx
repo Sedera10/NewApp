@@ -16,6 +16,7 @@ import Login from './pages/backoffice/login/Login'
 import ImportPage from './pages/backoffice/import/ImportPage'
 import LogOut from './pages/backoffice/login/LogOut'
 import ResetDataPage from './pages/backoffice/reset/ResetDataPage'
+import StockPage from './pages/backoffice/stock/StockPage'
 import CommandePageAdmin from './pages/backoffice/commande/Commande'
 import Dashboard from './pages/backoffice/dashboard/Dashboard'
 import ProtectedRoute from './components/auth/ProtectedRoute'
@@ -70,6 +71,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ResetDataPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mystore/admin/stock"
+            element={
+              <ProtectedRoute>
+                <StockPage />
               </ProtectedRoute>
             }
           />
