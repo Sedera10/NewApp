@@ -5,6 +5,8 @@ import './ProductCard.css';
 
 const ProductCard = ({ product }) => {
   const [isFavorite, setIsFavorite] = useState(false);
+  const priceTTC = product?.priceTTC ?? product?.price ?? '0.00';
+  const priceHT = product?.priceHT ?? '0.00';
 
   return (
     <div className="product-card">
@@ -34,7 +36,9 @@ const ProductCard = ({ product }) => {
           <h3 className="product-name">{product.name}</h3>
         </Link>
         <div className="price-container">
-          <span className="product-price">{product.price} €</span>
+          <span className="product-price">
+            {priceTTC} € <span className="product-price-ht">( {priceHT} € HT )</span>
+          </span>
           {product.oldPrice && <span className="old-price">{product.oldPrice} €</span>}
         </div>
       </div>

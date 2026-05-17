@@ -66,6 +66,9 @@ const ProductDetails = () => {
   if (loading) return <div>Chargement...</div>;
   if (!product) return <div>Produit non trouvé</div>;
 
+  const priceTTC = product?.priceTTC ?? product?.price ?? '0.00';
+  const priceHT = product?.priceHT ?? '0.00';
+
   return (
     <>
       <Header />
@@ -77,7 +80,9 @@ const ProductDetails = () => {
           </div>
           <div className="product-details-info">
             <h1>{product.name}</h1>
-            <p className="product-price">{product.price} €</p>
+            <p className="product-price">
+              {priceTTC} € <span className="product-price-ht">( {priceHT} € HT)</span>
+            </p>
             {product.isNew && <span className="badge badge-new">Nouveau</span>}
             
             {/* Affichage du stock */}

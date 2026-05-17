@@ -129,6 +129,14 @@ const normalizeCsvHeader = (value) => (value ?? '')
   .replace(/\s+/g, '')
   .replace(/_/g, '');
 
+const normalizeCsvHeaderStrict = (value) => (value ?? '')
+  .toString()
+  .replace(/^\uFEFF/, '')
+  .trim()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
 const normalizeCsvValue = (value) => (value ?? '').toString().trim();
 
 const normalizeCsvRows = (rows, fieldMap) => rows.map((row) => {
@@ -145,11 +153,11 @@ const normalizeCsvRows = (rows, fieldMap) => rows.map((row) => {
 
 const validateCsvHeaders = (headers, expectedHeaders, label) => {
   const actualHeaders = Array.isArray(headers) ? headers : [];
-  const normalizedExpected = expectedHeaders.map(normalizeCsvHeader);
-  const normalizedActual = actualHeaders.map(normalizeCsvHeader);
+  const normalizedExpected = expectedHeaders.map(normalizeCsvHeaderStrict);
+  const normalizedActual = actualHeaders.map(normalizeCsvHeaderStrict);
 
-  const missing = expectedHeaders.filter((header) => !normalizedActual.includes(normalizeCsvHeader(header)));
-  const unexpected = actualHeaders.filter((header) => !normalizedExpected.includes(normalizeCsvHeader(header)));
+  const missing = expectedHeaders.filter((header) => !normalizedActual.includes(normalizeCsvHeaderStrict(header)));
+  const unexpected = actualHeaders.filter((header) => !normalizedExpected.includes(normalizeCsvHeaderStrict(header)));
 
   if (missing.length || unexpected.length) {
     const parts = [];

@@ -37,6 +37,58 @@ const ensureArray = (value) => {
   return value ? [value] : [];
 };
 
+const TAX_RATE_CACHE = new Map();
+
+const formatPrice = (value) => Number.parseFloat(value || 0).toFixed(2);
+
+const getTaxRateForTaxRulesGroupId = async (groupId) => {
+  const normalizedGroupId = getNumericValue(groupId, null);
+  if (normalizedGroupId === null) return 0;
+
+  if (TAX_RATE_CACHE.has(normalizedGroupId)) {
+    return TAX_RATE_CACHE.get(normalizedGroupId);
+  }
+
+  try {
+    const taxRulesResponse = await api.get(`/tax_rules?display=full&filter[id_tax_rules_group]=[${normalizedGroupId}]`);
+    const taxRulesJsonObj = xmlToJson(taxRulesResponse.data);
+    const taxRules = ensureArray(taxRulesJsonObj?.prestashop?.tax_rules?.tax_rule);
+    const firstRule = taxRules[0];
+    const taxId = getNumericValue(firstRule?.id_tax, null);
+
+    if (taxId === null) {
+      TAX_RATE_CACHE.set(normalizedGroupId, 0);
+      return 0;
+    }
+
+    const taxResponse = await api.get(`/taxes/${taxId}?display=full`);
+    const taxJsonObj = xmlToJson(taxResponse.data);
+    const tax = taxJsonObj?.prestashop?.tax || null;
+    const taxRate = Number.parseFloat(getTextValue(tax?.rate)) || 0;
+
+    TAX_RATE_CACHE.set(normalizedGroupId, taxRate);
+    return taxRate;
+  } catch (error) {
+    console.warn(`Impossible de charger le taux TVA pour le groupe ${normalizedGroupId}`, error?.message || error);
+    TAX_RATE_CACHE.set(normalizedGroupId, 0);
+    return 0;
+  }
+};
+
+const enrichProductPricing = (product, taxRate = 0) => {
+  const priceHT = Number.parseFloat(getTextValue(product?.price)) || 0;
+  const normalizedTaxRate = Number.parseFloat(taxRate) || 0;
+  const priceTTC = priceHT * (1 + (normalizedTaxRate / 100));
+
+  return {
+    ...product,
+    taxRate: normalizedTaxRate,
+    priceHT: formatPrice(priceHT),
+    priceTTC: formatPrice(priceTTC),
+    price: formatPrice(priceTTC)
+  };
+};
+
 const getAssociationStockIds = (product) => {
   const stockNodes = ensureArray(product?.associations?.stock_availables?.stock_available || product?.associations?.stock_availables);
   return stockNodes
@@ -184,6 +236,15 @@ export const productService = {
         console.warn('Impossible de charger stock_availables, fallback sur quantity produit.', stockError?.message || stockError);
       }
 
+      const taxGroupIds = [...new Set(products
+        .map((product) => getNumericValue(product?.id_tax_rules_group, null))
+        .filter((groupId) => groupId !== null))];
+
+      const taxRatesByGroupId = {};
+      await Promise.all(taxGroupIds.map(async (groupId) => {
+        taxRatesByGroupId[groupId] = await getTaxRateForTaxRulesGroupId(groupId);
+      }));
+
       try {
         const combinationsResponse = await api.get('/combinations?display=full&limit=1000');
         const combinationsJsonObj = xmlToJson(combinationsResponse.data);
@@ -208,6 +269,7 @@ export const productService = {
       }, {});
 
       products = products.map((product) => {
+        const taxRate = taxRatesByGroupId[getNumericValue(product?.id_tax_rules_group, null)] || 0;
         const associationStockIds = getAssociationStockIds(product);
         const rowsForProduct = associationStockIds
           .map((id) => stockRowsById[id])
@@ -222,7 +284,7 @@ export const productService = {
           : getNumericValue(product?.quantity, 0);
 
         return {
-          ...product,
+          ...enrichProductPricing(product, taxRate),
           computed_stock: computedStock,
           stock_breakdown: breakdown
         };
@@ -294,6 +356,8 @@ export const productService = {
         const stockJsonObj = xmlToJson(stockResponse.data);
         const stockRows = ensureArray(stockJsonObj?.prestashop?.stock_availables?.stock_available);
 
+        const taxRate = await getTaxRateForTaxRulesGroupId(product?.id_tax_rules_group);
+
         // try to load combinations for labels
         let combinationsById = {};
         try {
@@ -310,13 +374,14 @@ export const productService = {
         }
 
         return {
-          ...product,
+          ...enrichProductPricing(product, taxRate),
           computed_stock: computeStockFromRows(product, stockRows),
           stock_breakdown: buildStockBreakdown(product, stockRows, combinationsById)
         };
       } catch {
+        const taxRate = await getTaxRateForTaxRulesGroupId(product?.id_tax_rules_group);
         return {
-          ...product,
+          ...enrichProductPricing(product, taxRate),
           computed_stock: getNumericValue(product?.quantity, 0),
           stock_breakdown: [{ idProductAttribute: 0, label: 'Produit', quantity: getNumericValue(product?.quantity, 0) }]
         };
@@ -358,7 +423,8 @@ export const productService = {
       }
     }
 
-    const price = p.price ? parseFloat(getText(p.price)).toFixed(2) : 0;
+    const priceHT = p.priceHT ? parseFloat(getText(p.priceHT)).toFixed(2) : parseFloat(getText(p.price) || 0).toFixed(2);
+    const priceTTC = p.priceTTC ? parseFloat(getText(p.priceTTC)).toFixed(2) : parseFloat(getText(p.price) || 0).toFixed(2);
     
     // Get image specific from prestashop
     const defaultImageId = getText(p.id_default_image);
@@ -392,7 +458,9 @@ export const productService = {
     return {
       id,
       name,
-      price,
+      price: priceTTC,
+      priceTTC,
+      priceHT,
       stock: getNumericValue(p.computed_stock, getNumericValue(p.quantity, 0)),
       isNew,
       marker,
