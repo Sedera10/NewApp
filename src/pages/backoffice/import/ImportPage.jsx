@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { MdCloudUpload, MdFileUpload, MdFolderZip, MdImage } from 'react-icons/md';
 import { importFile1, importFile2, importFile3, importFile4, rollbackAllImports } from '../../../service/csvImportService';
 import { extractZipFiles } from '../../../service/Util';
@@ -10,6 +10,22 @@ export default function ImportPage() {
     const [imageFiles, setImageFiles] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [progressMsg, setProgressMsg] = useState('');
+    const [errorMessage, setErrorMessage] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
+
+    useEffect(() => {
+        if (!successMessage) return;
+        const id = setTimeout(() => setSuccessMessage(''), 8000);
+        return () => clearTimeout(id);
+    }, [successMessage]);
+
+    useEffect(() => {
+        if (!errorMessage) return;
+        // scroll to top so alert becomes visible if out of view
+        try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { /* ignore */ }
+        const id = setTimeout(() => setErrorMessage(''), 10000);
+        return () => clearTimeout(id);
+    }, [errorMessage]);
 
     const handleFile1Change = (e) => {
         setFile1(e.target.files?.[0] || null);
@@ -35,9 +51,12 @@ export default function ImportPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+        // clear previous messages
+        setErrorMessage('');
+        setSuccessMessage('');
+
         if (!file1 && !file2 && !file3 && imageFiles.length === 0) {
-            alert("Veuillez sélectionner au moins un fichier à importer.");
+            setErrorMessage("Veuillez sélectionner au moins un fichier à importer.");
             return;
         }
 
@@ -108,7 +127,7 @@ export default function ImportPage() {
                 }
             }
 
-            alert("Fichiers importés avec succès !");
+            setSuccessMessage("Fichiers importés avec succès !");
             setFile1(null);
             setFile2(null);
             setFile3(null);
@@ -121,7 +140,7 @@ export default function ImportPage() {
 
         } catch (error) {
             console.error("Erreur d'import", error);
-            alert("Une erreur s'est produite lors de l'import : " + error.message);
+            setErrorMessage("Une erreur s'est produite lors de l'import : " + (error?.message || String(error)));
         } finally {
             setIsLoading(false);
             setProgressMsg('');
@@ -143,6 +162,20 @@ export default function ImportPage() {
                                     Importez vos fichiers CSV pour les données et ZIP pour les images.
                                 </p>
                             </div>
+
+                            {errorMessage && (
+                                <div className="alert alert-danger alert-dismissible fade show" role="alert" aria-live="polite">
+                                    {errorMessage}
+                                    <button type="button" className="btn-close" aria-label="Close" onClick={() => setErrorMessage('')}></button>
+                                </div>
+                            )}
+
+                            {successMessage && (
+                                <div className="alert alert-success alert-dismissible fade show" role="alert">
+                                    {successMessage}
+                                    <button type="button" className="btn-close" aria-label="Close" onClick={() => setSuccessMessage('')}></button>
+                                </div>
+                            )}
 
                             <form onSubmit={handleSubmit}>
                                 
