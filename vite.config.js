@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/eval/prestashop/api': {
+      '/prestashop/api': {
         target: 'http://localhost:80',
         changeOrigin: true,
       }

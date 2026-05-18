@@ -3,7 +3,7 @@ import axios from 'axios';
 import { xmlToJson } from './Util';
 
 const API_KEY = import.meta.env.VITE_API;
-const BASE_URL = '/eval/prestashop/api';
+const BASE_URL = '/prestashop/api';
 
 const api = axios.create({
   baseURL: BASE_URL,

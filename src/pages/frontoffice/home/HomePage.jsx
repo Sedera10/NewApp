@@ -7,18 +7,18 @@ import './HomePage.css';
 const HomePage = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [anonymeUser, setAnonymeUser] = useState(null);
+  const [avatarError, setAvatarError] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const anonyme = await customerService.getCustomerById(1);
-        setAnonymeUser(anonyme)
-        const fetchedUsers = await customerService.getCustomers();
+        const [, fetchedUsers] = await Promise.all([
+          customerService.getCustomerById(1),
+          customerService.getCustomers()
+        ]);
         const usersArray = Array.isArray(fetchedUsers) ? fetchedUsers : [fetchedUsers];
-        const usersSaufAnonyme = usersArray.filter((u) => u.id != 1);
-        setUsers(usersSaufAnonyme);
+        setUsers(usersArray);
       } catch (error) {
         console.error('Erreur lors du chargement des utilisateurs:', error);
       } finally {
@@ -46,11 +46,12 @@ const HomePage = () => {
       };
       localStorage.setItem('client_session', JSON.stringify(sessionData));
     } else {
-        const sessionData = {
-        id: getTextVal(anonymeUser.id),
-        firstname: getTextVal(anonymeUser.firstname),
-        lastname: getTextVal(anonymeUser.lastname),
-        email: getTextVal(anonymeUser.email),
+      const sessionData = {
+        id: null,
+        firstname: "Visteur",
+        lastname: "Anonyme",
+        email: "",
+        type: 2,
         isLoggedIn: true
       };
       localStorage.setItem('client_session', JSON.stringify(sessionData));
@@ -75,8 +76,13 @@ const HomePage = () => {
               onClick={() => handleSelectUser(u)}
             >
               <div className="user-avatar">
-                <img src="/user.png" alt="user" className="user-profile-img" onError={(e) => { e.target.style.display = 'none'; }} />
-                {!document.querySelector('img[src="/user.png"]') && <MdPerson size={40} color="#555" />}
+                <img
+                  src="/user.png"
+                  alt="user"
+                  className="user-profile-img"
+                  onError={() => setAvatarError(true)}
+                />
+                {avatarError && <MdPerson size={40} color="#555" />}
               </div>
               <div className="user-info">
                 <strong>{getTextVal(u.firstname)} {getTextVal(u.lastname)}</strong>
@@ -90,7 +96,12 @@ const HomePage = () => {
             onClick={() => handleSelectUser(null)}
           >
             <div className="user-avatar">
-              <img src="/user.png" alt="user" className="user-profile-img" onError={(e) => { e.target.style.display = 'none'; }} />
+              <img
+                src="/user.png"
+                alt="user"
+                className="user-profile-img"
+                onError={() => setAvatarError(true)}
+              />
               <MdPerson size={40} color="#777" />
             </div>
             <div className="user-info">
