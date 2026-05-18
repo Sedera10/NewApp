@@ -1,20 +1,53 @@
-import React, { useState, useEffect } from 'react';
-import { MdEdit, MdSearch, MdCheckCircle, MdError, MdHistory } from 'react-icons/md';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { MdCheckCircle, MdError, MdVisibility } from 'react-icons/md';
 import { productService } from '../../../service/Product';
 import './StockPage.css';
 
-export default function StockPage() {
-  const [products, setProducts] = useState([]);
-  const [filteredProducts, setFilteredProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [editingId, setEditingId] = useState(null);
-  const [editQuantity, setEditQuantity] = useState('');
-  const [message, setMessage] = useState({ type: '', text: '' });
-  const [stockData, setStockData] = useState({});
-  const [selectedProductId, setSelectedProductId] = useState('');
+const getTextVal = (value) => {
+  if (value && typeof value === 'object' && value['#text'] !== undefined) {
+    return value['#text'];
+  }
+  return value;
+};
 
-  // Récupérer les produits au chargement
+const formatProductRows = (products) => {
+  const rows = [];
+
+  products.forEach((product) => {
+    const formattedProduct = productService.formatProduct(product) || {};
+    const productName = formattedProduct.name || `Produit #${product.id}`;
+    const productImage = formattedProduct.image || '/LoginCover.avif';
+    const productReference = getTextVal(product.reference) || `REF-${product.id}`;
+    const breakdown = Array.isArray(product.stock_breakdown) && product.stock_breakdown.length > 0
+      ? product.stock_breakdown
+      : [{ idProductAttribute: 0, label: 'Produit', quantity: product.computed_stock ?? product.stock ?? 0 }];
+
+    breakdown.forEach((declination) => {
+      rows.push({
+        idProduct: String(product.id),
+        productName,
+        productImage,
+        productReference,
+        declinationId: Number.parseInt(declination.idProductAttribute, 10) || 0,
+        declinationName: declination.label || 'Produit',
+        quantity: Number.parseInt(declination.quantity, 10) || 0
+      });
+    });
+  });
+
+  return rows;
+};
+
+export default function StockPage() {
+  const navigate = useNavigate();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const [editingKey, setEditingKey] = useState(null);
+  const [editDelta, setEditDelta] = useState('0');
+  const [searchTerm, setSearchTerm] = useState('');
+
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -23,20 +56,7 @@ export default function StockPage() {
     try {
       setLoading(true);
       const allProducts = await productService.getAllProducts();
-      setProducts(allProducts);
-      setFilteredProducts(allProducts);
-      
-      // Initialiser les quantités avec le stock actuel
-      const stockMap = {};
-      allProducts.forEach(product => {
-        const quantity = getStockQuantity(product);
-        stockMap[product.id] = quantity;
-      });
-      setStockData(stockMap);
-
-      if (!selectedProductId && allProducts.length > 0) {
-        setSelectedProductId(String(allProducts[0].id));
-      }
+      setProducts(formatProductRows(allProducts));
     } catch (error) {
       showMessage('error', 'Erreur lors du chargement des produits');
       console.error(error);
@@ -45,168 +65,94 @@ export default function StockPage() {
     }
   };
 
-  // Obtenir la quantité du produit
-  const getStockQuantity = (product) => {
-    if (product.computed_stock !== undefined && product.computed_stock !== null) {
-      return parseInt(product.computed_stock, 10) || 0;
-    }
-
-    if (product.stock !== undefined && product.stock !== null) {
-      return parseInt(product.stock, 10) || 0;
-    }
-
-    if (product.quantity) {
-      if (typeof product.quantity === 'object' && product.quantity['#text']) {
-        return parseInt(product.quantity['#text'], 10) || 0;
-      }
-      return parseInt(product.quantity, 10) || 0;
-    }
-    return 0;
-  };
-
-  // Filtrer les produits par terme de recherche
-  useEffect(() => {
-    const filtered = products.filter(product => {
-      const name = (product.name?.value || product.name || '').toString().toLowerCase();
-      const ref = (product.reference?.value || product.reference || '').toString().toLowerCase();
-      const search = searchTerm.toLowerCase();
-      return name.includes(search) || ref.includes(search);
-    });
-    setFilteredProducts(filtered);
-  }, [searchTerm, products]);
-
-  // Afficher un message
   const showMessage = (type, text) => {
     setMessage({ type, text });
-    setTimeout(() => setMessage({ type: '', text: '' }), 4000);
+    window.clearTimeout(showMessage.timeoutId);
+    showMessage.timeoutId = window.setTimeout(() => {
+      setMessage({ type: '', text: '' });
+    }, 3500);
   };
 
-  // Démarrer l'édition
-  const startEdit = (product) => {
-    setEditingId(product.id);
-    setEditQuantity(stockData[product.id]?.toString() || '0');
+  const filteredProducts = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return products;
+
+    return products.filter((product) => (
+      product.productName.toLowerCase().includes(term)
+      || product.productReference.toLowerCase().includes(term)
+      || product.declinationName.toLowerCase().includes(term)
+    ));
+  }, [products, searchTerm]);
+
+  const startEdit = (row) => {
+    setEditingKey(`${row.idProduct}_${row.declinationId}`);
+    setEditDelta('0');
   };
 
-  // Annuler l'édition
   const cancelEdit = () => {
-    setEditingId(null);
-    setEditQuantity('');
+    setEditingKey(null);
+    setEditDelta('0');
   };
 
-  // Sauvegarder le stock
-  const saveStock = async (productId) => {
-    const newQuantity = parseInt(editQuantity, 10);
-
-    if (isNaN(newQuantity) || newQuantity < 0) {
-      showMessage('error', 'Veuillez entrer une quantité valide (>= 0)');
+  const saveStock = async (row) => {
+    const delta = Number.parseInt(editDelta, 10);
+    if (Number.isNaN(delta)) {
+      showMessage('error', 'Veuillez saisir un delta valide');
       return;
     }
 
     try {
       setLoading(true);
-      await productService.updateProductStock(productId, newQuantity);
-      
-      // Mettre à jour le stockData local
-      setStockData(prev => ({
-        ...prev,
-        [productId]: newQuantity
-      }));
-
-      setEditingId(null);
-      setEditQuantity('');
+      await productService.updateStockByDelta(row.idProduct, row.declinationId, delta);
       showMessage('success', 'Stock mis à jour avec succès');
+      await fetchProducts();
+      cancelEdit();
     } catch (error) {
-      showMessage('error', `Erreur lors de la mise à jour: ${error.message}`);
+      showMessage('error', 'Erreur lors de la mise à jour du stock');
       console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Obtenir le nom du produit
-  const getProductName = (product) => {
-    const getText = (val) => (val && typeof val === 'object' && val['#text'] !== undefined) ? val['#text'] : val;
-    if (getText(product.name?.value)) {
-      return getText(product.name.value);
-    }
-    if (product.name && typeof product.name === 'string') {
-      return getText(product.name);
-    }
-    return 'Sans nom';
+  const openProductSheet = (row) => {
+    navigate(`/mystore/admin/stock/${row.idProduct}`);
   };
 
-  // Obtenir la référence du produit
-  const getProductReference = (product) => {
-    if (product.reference?.value) {
-      return product.reference.value;
-    }
-    if (product.reference && typeof product.reference === 'string') {
-      return product.reference;
-    }
-    return '-';
-  };
-
-  const getSelectedProduct = () => {
-    if (!selectedProductId) return null;
-    return products.find((product) => String(product.id) === String(selectedProductId)) || null;
-  };
-
-  const selectedProduct = getSelectedProduct();
-  const selectedProductStock = selectedProduct ? (stockData[selectedProduct.id] ?? getStockQuantity(selectedProduct)) : 0;
-  const stockHistory = selectedProduct
-    ? productService.getDailyStockEvolution(selectedProduct.id, selectedProductStock)
-    : [];
-
-  const formatDisplayDate = (dateValue) => {
-    if (!dateValue) return '-';
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return dateValue;
-    return new Intl.DateTimeFormat('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    }).format(date);
-  };
-
-  const formatDateTime = (dateValue) => {
-    if (!dateValue) return '-';
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return dateValue;
-    return new Intl.DateTimeFormat('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(date);
-  };
+  const totalRows = filteredProducts.length;
+  const totalStock = filteredProducts.reduce((sum, row) => sum + row.quantity, 0);
 
   if (loading && products.length === 0) {
     return (
       <div className="stock-page loading">
-        <div className="spinner"></div>
-        <p>Chargement des produits...</p>
+        <div className="spinner" />
+        <p>Chargement des stocks...</p>
       </div>
     );
   }
 
   return (
     <div className="stock-page">
-      {/* Header */}
       <div className="stock-header">
         <div>
-          <h1 className="stock-title">Gestion du Stock</h1>
-          <p className="stock-subtitle">Mettez à jour les quantités en stock de vos produits</p>
+          <h1 className="stock-title">Gestion des stocks par déclinaison</h1>
+          <p className="stock-subtitle">
+            La modification passe par les deltas PrestaShop, pas par un stock global.
+          </p>
         </div>
-        <div className="stock-stats">
-          <div className="stat-badge">
-            <span className="stat-label">Total produits</span>
-            <span className="stat-value">{products.length}</span>
+
+        <div className="stock-summary">
+          <div className="summary-card">
+            <span>Lignes visibles</span>
+            <strong>{totalRows}</strong>
+          </div>
+          <div className="summary-card">
+            <span>Stock total</span>
+            <strong>{totalStock}</strong>
           </div>
         </div>
       </div>
 
-      {/* Message */}
       {message.text && (
         <div className={`message-alert message-${message.type}`}>
           <div className="message-icon">
@@ -216,174 +162,98 @@ export default function StockPage() {
         </div>
       )}
 
-      {/* Barre de recherche */}
-      <div className="stock-search">
-        <div className="search-box">
-          <MdSearch className="search-icon" />
-          <input
-            type="text"
-            placeholder="Rechercher par nom ou référence..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-        </div>
-        <div className="results-count">
-          {filteredProducts.length} produit{filteredProducts.length !== 1 ? 's' : ''}
-        </div>
+      <div className="stock-toolbar">
+        <input
+          type="search"
+          className="stock-search-input"
+          placeholder="Rechercher un produit, une référence ou une déclinaison"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+        />
       </div>
 
-      <div className="stock-history-panel">
-        <div className="stock-history-panel-header">
-          <div>
-            <h2><MdHistory /> Évolution du stock journalier</h2>
-            <p>Choisissez un produit pour voir son historique de stock.</p>
-          </div>
-
-          <select
-            className="stock-history-select"
-            value={selectedProductId}
-            onChange={(e) => setSelectedProductId(e.target.value)}
-          >
-            {products.length === 0 && <option value="">Aucun produit</option>}
-            {products.map((product) => (
-              <option key={product.id} value={String(product.id)}>
-                {getProductName(product)} — {getProductReference(product)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {!selectedProduct ? (
-          <div className="stock-history-empty">
-            Sélectionnez un produit pour afficher son évolution journalière.
-          </div>
-        ) : stockHistory.length === 0 ? (
-          <div className="stock-history-empty">
-            Aucune évolution de stock disponible pour ce produit.
-          </div>
-        ) : (
-          <div className="stock-history-table-wrapper">
-            <table className="stock-history-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Ancienne quantité</th>
-                  <th>Variation</th>
-                  <th>Nouvelle quantité</th>
-                  <th>Mise à jour</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stockHistory.map((entry, index) => (
-                  <tr key={`${entry.date}-${index}`}>
-                    <td>{formatDisplayDate(entry.date)}</td>
-                    <td>{entry.previousQuantity ?? 0}</td>
-                    <td>
-                      <span className={`stock-variation ${entry.variation >= 0 ? 'positive' : 'negative'}`}>
-                        {entry.variation >= 0 ? '+' : ''}{entry.variation}
-                      </span>
-                    </td>
-                    <td>{entry.quantity ?? 0}</td>
-                    <td>{formatDateTime(entry.updatedAt || entry.date)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Tableau des produits */}
       <div className="stock-container">
-        {filteredProducts.length === 0 ? (
-          <div className="no-products">
-            <MdSearch size={48} />
-            <p>Aucun produit trouvé</p>
-          </div>
-        ) : (
-          <div className="products-grid">
-            {filteredProducts.map((product) => (
-              <div key={product.id} className="product-card">
-                <div className="card-header">
-                  <div className="product-info">
-                    <h3 className="product-name">{getProductName(product)}</h3>
-                    <p className="product-reference">Ref: {getProductReference(product)}</p>
-                  </div>
-                </div>
+        <div className="stock-table-wrapper">
+          <table className="stock-table">
+            <thead>
+              <tr>
+                <th>Photo</th>
+                <th>Produit</th>
+                <th>Référence</th>
+                <th>Déclinaison</th>
+                <th>Stock actuel</th>
+                <th>Delta</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredProducts.length ? filteredProducts.map((row) => {
+                const rowKey = `${row.idProduct}_${row.declinationId}`;
+                const isEditing = editingKey === rowKey;
 
-                <div className="card-body">
-                  <div className="stock-section">
-                    <label className="stock-label">Quantité en stock</label>
-                    {editingId === product.id ? (
-                      <div className="edit-mode">
+                return (
+                  <tr key={rowKey}>
+                    <td>
+                      <img className="stock-product-image" src={row.productImage} alt={row.productName} />
+                    </td>
+                    <td>
+                      <strong>{row.productName}</strong>
+                    </td>
+                    <td>{row.productReference}</td>
+                    <td>{row.declinationName}</td>
+                    <td>
+                      <span className="stock-value">{row.quantity}</span>
+                    </td>
+                    <td>
+                      {isEditing ? (
                         <input
                           type="number"
-                          min="0"
-                          value={editQuantity}
-                          onChange={(e) => setEditQuantity(e.target.value)}
-                          className="quantity-input"
+                          value={editDelta}
+                          onChange={(event) => setEditDelta(event.target.value)}
+                          className="delta-input"
+                          placeholder="+5 / -2"
                           autoFocus
                         />
-                        <div className="edit-actions">
-                          <button
-                            onClick={() => saveStock(product.id)}
-                            disabled={loading}
-                            className="btn-save"
-                          >
-                            Enregistrer
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            disabled={loading}
-                            className="btn-cancel"
-                          >
-                            Annuler
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="view-mode">
-                        <div className={`quantity-display ${stockData[product.id] === 0 ? 'low-stock' : ''}`}>
-                          {stockData[product.id]}
-                        </div>
-                        {product?.stock_breakdown && product.stock_breakdown.length > 0 && (
-                          <div className="stock-breakdown">
-                            {product.stock_breakdown.map(sb => (
-                              <div key={sb.idProductAttribute} className="stock-breakdown-item">
-                                <small>{sb.label}: {sb.quantity}</small>
-                              </div>
-                            ))}
-                          </div>
+                      ) : (
+                        <span className="stock-placeholder">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="row-actions">
+                        {isEditing ? (
+                          <>
+                            <button onClick={() => saveStock(row)} className="btn-save">
+                              Enregistrer
+                            </button>
+                            <button onClick={cancelEdit} className="btn-cancel">
+                              Annuler
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => startEdit(row)} className="btn-edit">
+                              Modifier
+                            </button>
+                            <button onClick={() => openProductSheet(row)} className="btn-view">
+                              <MdVisibility size={16} />
+                              Fiche
+                            </button>
+                          </>
                         )}
-                        <button
-                          onClick={() => startEdit(product)}
-                          className="btn-edit"
-                          title="Modifier le stock"
-                        >
-                          <MdEdit /> Modifier
-                        </button>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="stock-info">
-                    {stockData[product.id] === 0 && (
-                      <div className="alert-low">
-                        <span>⚠️ Stock épuisé</span>
-                      </div>
-                    )}
-                    {stockData[product.id] > 0 && stockData[product.id] <= 10 && (
-                      <div className="alert-medium">
-                        <span>⚠️ Stock faible</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+                    </td>
+                  </tr>
+                );
+              }) : (
+                <tr>
+                  <td colSpan="7" className="no-products-row">
+                    Aucun produit ne correspond à la recherche.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

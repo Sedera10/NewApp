@@ -1,5 +1,5 @@
 import api from './api';
-import { xmlToJson } from './Util';
+import { xmlToJson, buildPrestashopXml } from './Util';
 
 const STOCK_HISTORY_KEY_PREFIX = 'stock_history_';
 
@@ -38,6 +38,7 @@ const ensureArray = (value) => {
 };
 
 const TAX_RATE_CACHE = new Map();
+const OPTION_VALUE_LABEL_CACHE = new Map();
 
 const formatPrice = (value) => Number.parseFloat(value || 0).toFixed(2);
 
@@ -118,7 +119,68 @@ const getVariantLabel = (product, combination) => {
   return combinationReference;
 };
 
-const buildStockBreakdown = (product, stockRows = [], combinationsById = {}) => {
+const getOptionValueLabel = async (valueId) => {
+  const normalizedValueId = getNumericValue(valueId, null);
+  if (normalizedValueId === null) return '';
+
+  if (OPTION_VALUE_LABEL_CACHE.has(normalizedValueId)) {
+    return OPTION_VALUE_LABEL_CACHE.get(normalizedValueId);
+  }
+
+  try {
+    const valueResponse = await api.get(`/product_option_values/${normalizedValueId}?display=full`);
+    const valueJsonObj = xmlToJson(valueResponse.data);
+    const optionValue = valueJsonObj?.prestashop?.product_option_value || null;
+
+    let nameText = '';
+    if (optionValue?.name?.language) {
+      nameText = getTextValue(ensureArray(optionValue.name.language)[0]);
+    } else {
+      nameText = getTextValue(optionValue?.name);
+    }
+
+    const label = String(nameText || '').trim();
+    OPTION_VALUE_LABEL_CACHE.set(normalizedValueId, label);
+    return label;
+  } catch (error) {
+    console.warn(`Impossible de charger la description pour l'option_value ${normalizedValueId}`);
+    OPTION_VALUE_LABEL_CACHE.set(normalizedValueId, '');
+    return '';
+  }
+};
+
+const getCombinationDisplayLabel = async (product, combination) => {
+  const valueNodes = ensureArray(combination?.associations?.product_option_values?.product_option_value || combination?.associations?.product_option_values);
+  const combinationNameParts = [];
+
+  for (const node of valueNodes) {
+    const valueLabel = await getOptionValueLabel(node?.id);
+    if (valueLabel) {
+      combinationNameParts.push(valueLabel);
+    }
+  }
+
+  return combinationNameParts.join(' - ') || getVariantLabel(product, combination);
+};
+
+const buildCombinationLabelsById = async (product, combinationsById = {}, combinationIds = null) => {
+  const idsToResolve = Array.isArray(combinationIds) && combinationIds.length
+    ? combinationIds
+    : Object.keys(combinationsById);
+
+  const entries = await Promise.all(idsToResolve.map(async (combinationId) => {
+    const combination = combinationsById[combinationId] || null;
+    const label = await getCombinationDisplayLabel(product, combination);
+    return [combinationId, label];
+  }));
+
+  return entries.reduce((acc, [combinationId, label]) => {
+    acc[combinationId] = label;
+    return acc;
+  }, {});
+};
+
+const buildStockBreakdown = (product, stockRows = [], combinationsById = {}, combinationLabelsById = {}) => {
   const normalizedRows = ensureArray(stockRows);
   const combinationIds = getAssociationCombinationIds(product);
 
@@ -134,10 +196,11 @@ const buildStockBreakdown = (product, stockRows = [], combinationsById = {}) => 
   return combinationIds.map((combinationId) => {
     const stockRow = normalizedRows.find((row) => getNumericValue(row?.id_product_attribute, 0) === combinationId);
     const combination = combinationsById[combinationId] || null;
+    const label = combinationLabelsById[combinationId] || getVariantLabel(product, combination);
 
     return {
       idProductAttribute: combinationId,
-      label: getVariantLabel(product, combination),
+      label,
       quantity: getNumericValue(stockRow?.quantity, 0)
     };
   });
@@ -210,6 +273,186 @@ const getStockHistory = (productId) => {
   return safeParseJson(storage.getItem(key) || '[]', []);
 };
 
+const normalizeDateKey = (value) => {
+  if (!value) return null;
+
+  const rawValue = String(getTextValue(value) || '').trim();
+  if (!rawValue) return null;
+
+  return rawValue.slice(0, 10);
+};
+
+const parseDateKeyUtc = (dateKey) => {
+  if (!dateKey) return null;
+  const parts = String(dateKey).split('-').map((part) => Number.parseInt(part, 10));
+  if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+    return null;
+  }
+  return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+};
+
+const addDays = (dateKey, offset) => {
+  const baseDate = parseDateKeyUtc(dateKey);
+  if (!baseDate) return dateKey;
+  baseDate.setUTCDate(baseDate.getUTCDate() + offset);
+  return baseDate.toISOString().slice(0, 10);
+};
+
+const toDateNumber = (dateKey) => {
+  const baseDate = parseDateKeyUtc(dateKey);
+  return baseDate ? baseDate.getTime() : Number.NaN;
+};
+
+const normalizeDeltaRows = (rows) => ensureArray(rows).map((row) => ({
+  id: getTextValue(row?.id),
+  idProduct: getNumericValue(row?.id_product, 0),
+  idProductAttribute: getNumericValue(row?.id_product_attribute, 0),
+  delta: Number.parseFloat(getTextValue(row?.delta) || 0) || 0,
+  dateAdd: normalizeDateKey(row?.date_add || row?.date_upd || row?.date || row?.created_at)
+}));
+
+const aggregateMovementsByDate = (rows, labelsByAttribute = {}) => rows.reduce((acc, row) => {
+  if (!row.dateAdd) return acc;
+
+  if (!acc[row.dateAdd]) {
+    acc[row.dateAdd] = {
+      date: row.dateAdd,
+      entree: 0,
+      sorti: 0,
+      entreeDetails: [],
+      sortiDetails: []
+    };
+  }
+
+  const attrKey = String(row.idProductAttribute || 0);
+  const attrLabel = labelsByAttribute[attrKey] || (Number.parseInt(attrKey, 10) === 0 ? 'Produit mère' : `Déclinaison ${attrKey}`);
+  const quantity = Math.abs(Number(row.delta) || 0);
+
+  if (row.delta >= 0) {
+    acc[row.dateAdd].entree += quantity;
+    acc[row.dateAdd].entreeDetails.push({
+      idProductAttribute: row.idProductAttribute,
+      label: attrLabel,
+      quantity,
+      text: `${quantity} (${attrLabel})`
+    });
+  } else {
+    acc[row.dateAdd].sorti += quantity;
+    acc[row.dateAdd].sortiDetails.push({
+      idProductAttribute: row.idProductAttribute,
+      label: attrLabel,
+      quantity,
+      text: `${quantity} (${attrLabel})`
+    });
+  }
+
+  return acc;
+}, {});
+
+const resolveDailyEvolution = ({
+  startDate,
+  endDate,
+  currentQuantity,
+  movementMap,
+  anchorDate = getTodayKey()
+}) => {
+  const normalizedStart = normalizeDateKey(startDate);
+  const normalizedEnd = normalizeDateKey(endDate);
+
+  if (!normalizedStart || !normalizedEnd) {
+    return [];
+  }
+
+  const start = toDateNumber(normalizedStart) <= toDateNumber(normalizedEnd) ? normalizedStart : normalizedEnd;
+  const end = toDateNumber(normalizedStart) <= toDateNumber(normalizedEnd) ? normalizedEnd : normalizedStart;
+  const anchor = normalizeDateKey(anchorDate) || getTodayKey();
+  const anchorNumber = toDateNumber(anchor);
+  const startNumber = toDateNumber(start);
+  const endNumber = toDateNumber(end);
+  const anchorAvailable = Number(currentQuantity) || 0;
+
+  const getMovement = (date) => movementMap[date] || { date, entree: 0, sorti: 0, entreeDetails: [], sortiDetails: [] };
+
+  const rowsByDate = new Map();
+  const dates = [];
+
+  for (let currentDate = start; toDateNumber(currentDate) <= endNumber; currentDate = addDays(currentDate, 1)) {
+    if (toDateNumber(currentDate) < startNumber) {
+      continue;
+    }
+    dates.push(currentDate);
+    if (currentDate === end) {
+      break;
+    }
+  }
+
+  let runningEndOfDay = anchorAvailable;
+
+  for (let current = anchor; toDateNumber(current) >= startNumber; current = addDays(current, -1)) {
+    const movement = getMovement(current);
+    const endOfDay = current === anchor
+      ? anchorAvailable
+      : runningEndOfDay - movement.entree + movement.sorti;
+    const stockInitial = endOfDay - movement.entree + movement.sorti;
+
+    rowsByDate.set(current, {
+      date: current,
+      stockInitial: Number(stockInitial) || 0,
+      entree: Number(movement.entree) || 0,
+      sorti: Number(movement.sorti) || 0,
+      disponibles: Number(endOfDay) || 0,
+      entreeDetails: movement.entreeDetails || [],
+      sortiDetails: movement.sortiDetails || []
+    });
+
+    runningEndOfDay = stockInitial;
+
+    if (current === start) {
+      break;
+    }
+  }
+
+  let forwardEndOfDay = anchorAvailable;
+  if (endNumber > anchorNumber) {
+    for (let current = addDays(anchor, 1); toDateNumber(current) <= endNumber; current = addDays(current, 1)) {
+      const movement = getMovement(current);
+      const stockInitial = forwardEndOfDay;
+      const disponibles = stockInitial + movement.entree - movement.sorti;
+
+      rowsByDate.set(current, {
+        date: current,
+        stockInitial: Number(stockInitial) || 0,
+        entree: Number(movement.entree) || 0,
+        sorti: Number(movement.sorti) || 0,
+        disponibles: Number(disponibles) || 0,
+        entreeDetails: movement.entreeDetails || [],
+        sortiDetails: movement.sortiDetails || []
+      });
+
+      forwardEndOfDay = disponibles;
+      if (current === end) {
+        break;
+      }
+    }
+  }
+
+  return dates.map((date) => rowsByDate.get(date)).filter(Boolean);
+};
+
+const getStockDeltas = async (productId) => {
+  try {
+    let url = `/stock_deltas?display=full&filter[id_product]=[${productId}]`;
+
+    const response = await api.get(url);
+    const jsonObj = xmlToJson(response.data);
+    const deltas = jsonObj?.prestashop?.stock_deltas?.stock_delta || [];
+    return ensureArray(deltas);
+  } catch (error) {
+    console.warn('Impossible de charger stock_deltas, fallback vide.', error?.message || error);
+    return [];
+  }
+};
+
 export const productService = {
   // Fetch all products with full details and optional filters
   getAllProducts: async (filters = {}) => {
@@ -268,15 +511,19 @@ export const productService = {
         return acc;
       }, {});
 
-      products = products.map((product) => {
+      products = await Promise.all(products.map(async (product) => {
         const taxRate = taxRatesByGroupId[getNumericValue(product?.id_tax_rules_group, null)] || 0;
         const associationStockIds = getAssociationStockIds(product);
         const rowsForProduct = associationStockIds
           .map((id) => stockRowsById[id])
           .filter(Boolean);
+        const combinationIds = getAssociationCombinationIds(product);
+        const combinationLabelsById = combinationIds.length && Object.keys(combinationsById).length
+          ? await buildCombinationLabelsById(product, combinationsById, combinationIds)
+          : {};
 
         const breakdown = rowsForProduct.length
-          ? buildStockBreakdown(product, rowsForProduct, combinationsById)
+          ? buildStockBreakdown(product, rowsForProduct, combinationsById, combinationLabelsById)
           : [{ idProductAttribute: 0, label: 'Produit', quantity: getNumericValue(product?.quantity, 0) }];
 
         const computedStock = rowsForProduct.length
@@ -288,7 +535,7 @@ export const productService = {
           computed_stock: computedStock,
           stock_breakdown: breakdown
         };
-      });
+      }));
       
       // Post-fetch filtering for categories (using all associated categories, not just the default one)
       if (filters.category) {
@@ -373,10 +620,14 @@ export const productService = {
           // ignore
         }
 
+        const combinationLabelsById = Object.keys(combinationsById).length
+          ? await buildCombinationLabelsById(product, combinationsById, Object.keys(combinationsById))
+          : {};
+
         return {
           ...enrichProductPricing(product, taxRate),
           computed_stock: computeStockFromRows(product, stockRows),
-          stock_breakdown: buildStockBreakdown(product, stockRows, combinationsById)
+          stock_breakdown: buildStockBreakdown(product, stockRows, combinationsById, combinationLabelsById)
         };
       } catch {
         const taxRate = await getTaxRateForTaxRulesGroupId(product?.id_tax_rules_group);
@@ -619,6 +870,106 @@ export const productService = {
     } catch (error) {
       throw new Error(`Erreur mise à jour stock: ${error.message}`);
     }
+  },
+
+  updateStockByDelta: async (productId, productAttributeId = 0, delta = 0) => {
+    try {
+      if (!productId && productId !== 0) {
+        throw new Error('Identifiant produit manquant');
+      }
+
+      const normalizedDelta = Number.parseFloat(delta);
+      if (Number.isNaN(normalizedDelta)) {
+        throw new Error('Delta de stock invalide');
+      }
+
+      const xmlPayload = buildPrestashopXml('stock_delta', {
+        id_product: productId,
+        id_product_attribute: productAttributeId || 0,
+        delta: normalizedDelta
+      });
+
+      const response = await api.post('/stock_deltas', xmlPayload, {
+        headers: { 'Content-Type': 'application/xml' }
+      });
+
+      return response.data;
+    } catch (error) {
+      throw new Error(`Erreur mise à jour stock via stock_deltas: ${error.message}`);
+    }
+  },
+
+  getStockDeltas: async (productId) => getStockDeltas(productId),
+
+  getStockEvolutionBetweenDates: async ({ productId, productAttributeId = 0, startDate, endDate }) => {
+    if (!productId && productId !== 0) {
+      throw new Error('Identifiant produit manquant');
+    }
+
+    const normalizedStart = normalizeDateKey(startDate);
+    const normalizedEnd = normalizeDateKey(endDate);
+
+    if (!normalizedStart || !normalizedEnd) {
+      return {
+        product: await productService.getProductById(productId),
+        selectedStock: null,
+        currentQuantity: 0,
+        rows: [],
+        movements: []
+      };
+    }
+
+    const rawProduct = await productService.getProductById(productId);
+    if (!rawProduct) {
+      throw new Error(`Produit ${productId} non trouvé`);
+    }
+
+    const selectedAttrId = Number.parseInt(productAttributeId, 10) || 0;
+    const stockBreakdown = ensureArray(rawProduct.stock_breakdown || []);
+    const selectedStock = stockBreakdown.find((row) => Number.parseInt(row?.idProductAttribute, 10) === selectedAttrId) || stockBreakdown[0] || {
+      idProductAttribute: selectedAttrId,
+      label: 'Produit',
+      quantity: getNumericValue(rawProduct?.computed_stock, getNumericValue(rawProduct?.quantity, 0))
+    };
+
+      const stockLabelByAttribute = stockBreakdown.reduce((acc, row) => {
+        acc[String(row.idProductAttribute || 0)] = row.label || (Number.parseInt(row.idProductAttribute, 10) === 0 ? 'Produit mère' : `Déclinaison ${row.idProductAttribute}`);
+        return acc;
+      }, {});
+
+      // Mode déclinaison (actif)
+      const currentQuantity = getNumericValue(selectedStock.quantity, getNumericValue(rawProduct?.computed_stock, getNumericValue(rawProduct?.quantity, 0)));
+      // Mode produit global (décommente si tu veux revenir au produit parent)
+      // const currentQuantity = getNumericValue(rawProduct?.computed_stock, getNumericValue(rawProduct?.quantity, Number.parseFloat(selectedStock.quantity) || 0));
+    const startKey = toDateNumber(normalizedStart) <= toDateNumber(normalizedEnd) ? normalizedStart : normalizedEnd;
+    const endKey = toDateNumber(normalizedStart) <= toDateNumber(normalizedEnd) ? normalizedEnd : normalizedStart;
+    const deltaRows = normalizeDeltaRows(await getStockDeltas(productId))
+      // Mode déclinaison (actif)
+      .filter((row) => row.idProductAttribute === selectedAttrId)
+      // Mode produit global (décommente si tu veux revenir au produit parent)
+      // .filter((row) => row.idProductAttribute !== undefined)
+      .filter((row) => row.dateAdd
+        && toDateNumber(row.dateAdd) >= toDateNumber(startKey)
+        && toDateNumber(row.dateAdd) <= toDateNumber(getTodayKey()));
+      const movementMap = aggregateMovementsByDate(deltaRows, stockLabelByAttribute);
+
+    console.debug(`productService.getStockEvolutionBetweenDates: deltas=${deltaRows.length}, movementDates=${Object.keys(movementMap).length}`);
+
+    const rows = resolveDailyEvolution({
+      startDate: startKey,
+      endDate: endKey,
+      currentQuantity,
+      movementMap,
+      anchorDate: getTodayKey()
+    });
+
+    return {
+      product: rawProduct,
+      selectedStock,
+      currentQuantity,
+      rows,
+      movements: deltaRows
+    };
   },
 
   // Retourne l'évolution journalière du stock d'un produit

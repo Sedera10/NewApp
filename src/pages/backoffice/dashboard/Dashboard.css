@@ -5,11 +5,24 @@
   color: var(--color-text-main, #333);
 }
 
+.dashboard-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
 .dashboard-title {
   font-size: 28px;
   font-weight: 700;
-  margin-bottom: 30px;
+  margin-bottom: 8px;
   color: var(--color-primary, #3d4a41);
+}
+
+.dashboard-intro {
+  margin: 0;
+  color: #666;
 }
 
 .dashboard-subtitle {
@@ -26,6 +39,7 @@
   display: flex;
   gap: 24px;
   flex-wrap: wrap;
+  margin-bottom: 28px;
 }
 
 .stat-card {
@@ -75,6 +89,73 @@
   overflow: hidden;
 }
 
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.filter-panel,
+.period-section,
+.period-placeholder {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.filter-panel-header,
+.dashboard-panel-header {
+  margin-bottom: 16px;
+}
+
+.filter-panel-header h2,
+.dashboard-panel-header h3 {
+  margin: 0 0 6px 0;
+  color: var(--color-primary, #3d4a41);
+}
+
+.filter-panel-header p,
+.dashboard-panel-header p {
+  margin: 0;
+  color: #666;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 260px));
+  gap: 16px;
+}
+
+.filter-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 600;
+  color: #444;
+}
+
+.filter-grid input {
+  border: 1px solid var(--color-border, #eee);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font: inherit;
+  background: #fff;
+}
+
+.period-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.period-placeholder {
+  color: #666;
+  font-style: italic;
+}
+
 .dashboard-table {
   width: 100%;
   border-collapse: collapse;
@@ -98,6 +179,12 @@
 
 .dashboard-table tbody tr:hover {
   background-color: #fcfcfc;
+}
+
+.dashboard-table .no-data {
+  text-align: center;
+  color: #777;
+  padding: 20px 24px;
 }
 
 .date-col {
@@ -152,4 +239,15 @@
   text-align: center;
   color: #888;
   font-style: italic;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-grid,
+  .period-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -38,10 +38,6 @@ export default function Sidebar({ isOpen }) {
               <span>Tableau de bord</span>
             </NavLink>
           </li>
-          
-          <li className="nav-item mt-3">
-            <h6 className="ps-4 ms-2 text-uppercase text-xs font-weight-bolder opacity-5 mt-2">Configurations</h6>
-          </li>
 
           <li className="nav-item">
             <NavLink to="/mystore/admin/import" className="nav-link text-dark d-flex align-items-center mb-1">
@@ -70,16 +66,12 @@ export default function Sidebar({ isOpen }) {
             </NavLink>
           </li>
 
-          <li className="nav-item mt-4">
-            <h6 className="ps-4 ms-2 text-uppercase text-xs font-weight-bolder opacity-5">Commandes</h6>
-          </li>
-
           <li className="nav-item">
             <NavLink to="/mystore/admin/commandes" className="nav-link text-dark d-flex align-items-center mb-1">
               <div className="icon-box me-3 d-flex align-items-center justify-content-center">
                 <MdKeyboardCommandKey size={20} />
               </div>
-              <span>Liste</span>
+              <span>Commandes</span>
             </NavLink>
           </li>
 

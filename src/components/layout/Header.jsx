@@ -35,7 +35,11 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
     };
 
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('local-cart-updated', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('local-cart-updated', handleStorageChange);
+    };
   }, []);
 
   const location = useLocation();

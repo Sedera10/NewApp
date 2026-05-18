@@ -201,6 +201,9 @@ const CheckoutPage = () => {
             getTextVal(selectedAddress.id)
           );
           cartId = getTextVal(cartInPrestashop.id);
+          if (cartId) {
+          localStorage.setItem(`current_cart_id_${customer.id}`, cartId);
+          }
       } else {
            await cartService.updateCart(currentCartId, {
                id_customer: customer.id,
@@ -214,7 +217,6 @@ const CheckoutPage = () => {
                    }
                }
            });
-           localStorage.removeItem(`current_cart_id_${customer.id}`); // Clear it as it becomes an order
       }
       
       console.log('Cart ready with ID:', cartId);
@@ -237,6 +239,7 @@ const CheckoutPage = () => {
         id_carrier: carrierId,
         payment: paymentModules.find(m => m.name === paymentMethod)?.displayName || paymentMethod,
         module: paymentMethod,
+        secure_key: getTextVal(customerData?.secure_key) || getTextVal(customer?.secure_key),
         total_paid: parseFloat(totalWithShipping.toFixed(6)),
         total_products: parseFloat(totalAmount.toFixed(6)),
         total_shipping: parseFloat((selectedCarrier?.price || 0).toFixed(6)),
@@ -252,6 +255,7 @@ const CheckoutPage = () => {
       console.log('Order created:', createdOrder);
 
       localCartService.clearCart(customer.id);
+      localStorage.removeItem(`current_cart_id_${customer.id}`);
       navigate('/mystore/fr/products', {
         state: { orderSuccess: true, orderId: getTextVal(createdOrder?.id) }
       });

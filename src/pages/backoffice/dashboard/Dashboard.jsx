@@ -1,129 +1,286 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import './Dashboard.css';
 import { commandeService } from '../../../service/Commande';
-import StatCard from '../../../components/UI/others/StatCard'
+import { cartService } from '../../../service/cartService';
+import { customerService } from '../../../service/Customer';
+import StatCard from '../../../components/UI/others/StatCard';
 
-const Dashboard = () => {
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    totalCommandes: 0,
-    totalMontant: 0,
-    parJour: []
+const getTextVal = (value) => {
+  if (value && typeof value === 'object' && value['#text'] !== undefined) {
+    return value['#text'];
+  }
+  return value;
+};
+
+const toDateKey = (value) => {
+  if (!value) return null;
+  const rawValue = String(getTextVal(value) || '').trim();
+  if (!rawValue) return null;
+  return rawValue.slice(0, 10);
+};
+
+const parseAmount = (value) => Number.parseFloat(getTextVal(value) || 0) || 0;
+
+const toDateNumber = (dateKey) => new Date(`${dateKey}T00:00:00`).getTime();
+
+const aggregateByDay = (items, getDate, getAmount) => {
+  const dayMap = {};
+
+  items.forEach((item) => {
+    const dayKey = toDateKey(getDate(item));
+    if (!dayKey) return;
+
+    if (!dayMap[dayKey]) {
+      dayMap[dayKey] = {
+        date: dayKey,
+        count: 0,
+        amount: 0
+      };
+    }
+
+    dayMap[dayKey].count += 1;
+    dayMap[dayKey].amount += getAmount(item);
   });
 
-  const getTextVal = (val) => {
-    if (val && typeof val === 'object' && val['#text'] !== undefined) {
-      return val['#text'];
-    }
-    return val;
-  };
+  return Object.values(dayMap).sort((a, b) => toDateNumber(b.date) - toDateNumber(a.date));
+};
+
+export default function Dashboard() {
+  const [loading, setLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState({ start: '', end: '' });
+  const [globalStats, setGlobalStats] = useState({
+    totalOrders: 0,
+    totalAmount: 0,
+    totalCustomers: 0,
+    ordersByDay: [],
+    allOrders: [],
+    allCarts: []
+  });
+  const [periodStats, setPeriodStats] = useState(null);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const loadDashboardStats = async () => {
       try {
         setLoading(true);
-        // Fetch all orders
-        const orders = await commandeService.getCommandes();
-        
-        let totalCmd = 0;
-        let totalAmt = 0;
-        const jourMap = {};
+        const [orders, customers, carts] = await Promise.all([
+          commandeService.getCommandes(),
+          customerService.getCustomers(),
+          cartService.getCarts()
+        ]);
 
-        // Process orders
-        orders.forEach(order => {
-          totalCmd++;
-          const amount = parseFloat(getTextVal(order.total_paid) || 0);
-          totalAmt += amount;
+        const totalAmount = orders.reduce((sum, order) => sum + parseAmount(order.total_paid), 0);
+        const ordersByDay = aggregateByDay(
+          orders,
+          (order) => order.date_add,
+          (order) => parseAmount(order.total_paid)
+        );
 
-          // Group by Date 
-          const fullDate = getTextVal(order.date_add); // format: YYYY-MM-DD HH:MM:SS
-          if (fullDate) {
-            const dateStr = fullDate.split(' ')[0]; // YYYY-MM-DD
-            if (!jourMap[dateStr]) {
-              jourMap[dateStr] = {
-                date: dateStr,
-                nbCommande: 0,
-                montant: 0
-              };
-            }
-            jourMap[dateStr].nbCommande++;
-            jourMap[dateStr].montant += amount;
-          }
-        });
-
-        // Convert map to sorted array (latest first)
-        const parJourArr = Object.values(jourMap).sort((a, b) => new Date(b.date) - new Date(a.date));
-
-        setStats({
-          totalCommandes: totalCmd,
-          totalMontant: totalAmt,
-          parJour: parJourArr
+        setGlobalStats({
+          totalOrders: orders.length,
+          totalAmount,
+          totalCustomers: customers.length,
+          ordersByDay,
+          allOrders: orders,
+          allCarts: carts
         });
       } catch (error) {
-        console.error("Erreur lors de la récupération des statistiques:", error);
+        console.error('Erreur lors du chargement du dashboard:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchStats();
+    loadDashboardStats();
   }, []);
+
+  useEffect(() => {
+    const { start, end } = dateFilter;
+
+    if (!start || !end) {
+      setPeriodStats(null);
+      return;
+    }
+
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    endDate.setHours(23, 59, 59, 999);
+
+    const filteredOrders = globalStats.allOrders.filter((order) => {
+      const orderDate = new Date(order.date_add);
+      return orderDate >= startDate && orderDate <= endDate;
+    });
+
+    const orderCartIds = new Set(
+      globalStats.allOrders
+        .map((order) => String(getTextVal(order.id_cart) || '').trim())
+        .filter(Boolean)
+    );
+
+    const filteredCarts = globalStats.allCarts.filter((cart) => {
+      if (!cart.dateAdd) return false;
+      const cartDate = new Date(cart.dateAdd);
+      const cartId = String(getTextVal(cart.id) || '').trim();
+      return cartDate >= startDate && cartDate <= endDate && cartId && !orderCartIds.has(cartId);
+    });
+
+    setPeriodStats({
+      totalOrders: filteredOrders.length,
+      totalAmount: filteredOrders.reduce((sum, order) => sum + parseAmount(order.total_paid), 0),
+      ordersByDay: aggregateByDay(
+        filteredOrders,
+        (order) => order.date_add,
+        (order) => parseAmount(order.total_paid)
+      ),
+      cartsByDay: aggregateByDay(
+        filteredCarts,
+        (cart) => cart.dateAdd,
+        (cart) => parseAmount(cart.totalAmount)
+      ),
+      cartsCount: filteredCarts.length,
+      cartsAmount: filteredCarts.reduce((sum, cart) => sum + parseAmount(cart.totalAmount), 0)
+    });
+  }, [dateFilter, globalStats.allOrders, globalStats.allCarts]);
+
+  const handleFilterChange = (field, value) => {
+    setDateFilter((previous) => ({ ...previous, [field]: value }));
+  };
 
   if (loading) {
     return (
       <div className="dashboard-container loading">
-        <div className="spinner"></div>
+        <div className="spinner" />
         <p>Chargement des statistiques...</p>
       </div>
     );
   }
 
+  const hasActiveFilter = Boolean(dateFilter.start && dateFilter.end);
+
   return (
     <div className="dashboard-container">
-      <h1 className="dashboard-title">Tableau de bord</h1>
-      
-      {/* Statistiques globales */}
-      <div className="dashboard-summary">
-        <StatCard title="Total Général" amount={stats.totalCommandes} footerText="Commandes totales"/>
-        <StatCard title="Montant Total" amount={stats.totalMontant} footerText="Chiffre d'affaires global"/>
+      <div className="dashboard-hero">
+        <div>
+          <h1 className="dashboard-title">Tableau de bord</h1>
+          <p className="dashboard-intro">
+            Vue globale des commandes, clients et paniers. Le filtre de dates reste vide par défaut.
+          </p>
+        </div>
       </div>
 
-      {/* Statistiques par jour */}
-      <h2 className="dashboard-subtitle">Statistiques par Jour</h2>
-      <div className="dashboard-table-container">
-        {stats.parJour.length === 0 ? (
-          <p className="no-data">Aucune donnée disponible</p>
-        ) : (
-          <table className="dashboard-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Nombre de commandes</th>
-                <th>Montant généré</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.parJour.map(jour => (
-                <tr key={jour.date}>
-                  <td className="date-col">
-                    {new Date(jour.date).toLocaleDateString('fr-FR', {
-                      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-                    })}
-                  </td>
-                  <td className="nb-col">
-                    <span className="badge-nb">{jour.nbCommande}</span>
-                  </td>
-                  <td className="montant-col font-weight-bold">
-                    {jour.montant.toFixed(2)} €
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <div className="dashboard-summary">
+        <StatCard title="Total commandes" amount={globalStats.totalOrders} footerText="Depuis le début" />
+        <StatCard title="Montant total des commandes" amount={globalStats.totalAmount} footerText="Depuis le début" format="currency" />
+        <StatCard title="Nombre de clients" amount={globalStats.totalCustomers} footerText="Clients enregistrés" />
       </div>
+
+      <section className="filter-panel">
+        <div className="filter-panel-header">
+          <div>
+            <h2>Filtre par période</h2>
+            <p>Choisissez une date de début et une date de fin pour afficher les résultats détaillés.</p>
+          </div>
+        </div>
+
+        <div className="filter-grid">
+          <label>
+            <span>Date de début</span>
+            <input
+              type="date"
+              value={dateFilter.start}
+              onChange={(event) => handleFilterChange('start', event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Date de fin</span>
+            <input
+              type="date"
+              value={dateFilter.end}
+              onChange={(event) => handleFilterChange('end', event.target.value)}
+            />
+          </label>
+        </div>
+      </section>
+
+      {hasActiveFilter ? (
+        <section className="period-section">
+          <div className="period-summary-grid">
+            <StatCard title="Commandes sur la période" amount={periodStats?.totalOrders || 0} footerText="Nombre total" />
+            <StatCard title="Montant des commandes" amount={periodStats?.totalAmount || 0} footerText="Montant cumulé" format="currency" />
+            <StatCard title="Paniers sans commande" amount={periodStats?.cartsCount || 0} footerText="Non associés" />
+            <StatCard title="Montant des paniers" amount={periodStats?.cartsAmount || 0} footerText="Total des paniers non associés" format="currency" />
+          </div>
+
+          <div className="dashboard-grid">
+            <article className="dashboard-table-container">
+              <div className="dashboard-panel-header">
+                <h3>Commandes par jour</h3>
+                <p>Entre les deux dates choisies.</p>
+              </div>
+
+              <table className="dashboard-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Nombre de commandes</th>
+                    <th>Montant total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {periodStats?.ordersByDay?.length ? (
+                    periodStats.ordersByDay.map((row) => (
+                      <tr key={row.date}>
+                        <td>{new Date(row.date).toLocaleDateString('fr-FR')}</td>
+                        <td>{row.count}</td>
+                        <td>{row.amount.toFixed(2)} €</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="3" className="no-data">Aucune commande sur cette période.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </article>
+
+            <article className="dashboard-table-container">
+              <div className="dashboard-panel-header">
+                <h3>Paniers non associés par jour</h3>
+                <p>Paniers sans commande détectés sur la même période.</p>
+              </div>
+
+              <table className="dashboard-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Nombre de paniers</th>
+                    <th>Montant total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {periodStats?.cartsByDay?.length ? (
+                    periodStats.cartsByDay.map((row) => (
+                      <tr key={row.date}>
+                        <td>{new Date(row.date).toLocaleDateString('fr-FR')}</td>
+                        <td>{row.count}</td>
+                        <td>{row.amount.toFixed(2)} €</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="3" className="no-data">Aucun panier non associé sur cette période.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </article>
+          </div>
+        </section>
+      ) : (
+        <section className="period-placeholder">
+          Sélectionnez deux dates pour afficher le détail quotidien des commandes et des paniers non associés.
+        </section>
+      )}
     </div>
   );
-};
-
-export default Dashboard;
+}

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { commandeService } from '../../../service/Commande';
 import { cartService } from '../../../service/cartService';
+import { localCartService } from '../../../service/Cart';
 import Header from '../../../components/layout/Header';
 import './Commande.css';
 
@@ -48,6 +49,7 @@ export default function CommandePage() {
         );
 
         setPaniers(lesPaniersFormatted.filter(Boolean));
+        console.log("Panier non associé : " , lesPaniersFormatted.filter(Boolean));
 
         setCommandes(customerCommandes);
 
@@ -66,6 +68,31 @@ export default function CommandePage() {
 
   const handleViewDetails = (orderId) => {
     navigate(`/mystore/fr/commandes/${orderId}`);
+  };
+
+  const handleResumeCart = async (panier) => {
+    try {
+      const customerId = customer?.id;
+      if (!customerId || !panier?.id) {
+        navigate('/mystore/fr/cart');
+        return;
+      }
+
+      let cartToUse = panier;
+      if (!cartToUse.products || cartToUse.products.length === 0) {
+        cartToUse = await cartService.getCartById(panier.id);
+      }
+
+      if (cartToUse?.products?.length) {
+        localCartService.setCart(customerId, cartToUse.products);
+        localStorage.setItem(`current_cart_id_${customerId}`, panier.id);
+      }
+
+      navigate('/mystore/fr/cart');
+    } catch (error) {
+      console.error('Erreur lors de la reprise du panier:', error);
+      navigate('/mystore/fr/cart');
+    }
   };
 
   const getStateColor = (state) => {
@@ -151,7 +178,7 @@ export default function CommandePage() {
                       <td className="text-center">
                         <button
                           className="btn btn-sm btn-outline-primary"
-                          onClick={() => navigate('/mystore/fr/cart')}
+                          onClick={() => handleResumeCart(panier)}
                         >
                           Reprendre
                         </button>

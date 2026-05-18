@@ -76,14 +76,14 @@ export const loginFO = async (email, password) => {
               const lastCartId = typeof lastCart.id === 'object' ? lastCart.id['#text'] : lastCart.id;
               localStorage.setItem(`current_cart_id_${newCustomerId}`, lastCartId);
               
-              // On recrée la structure locale (facultatif si pre-chargé via API sur Checkout, mais utile pour l'UI)
-              let cartRows = lastCart?.associations?.cart_rows?.cart_row || [];
-              if (!Array.isArray(cartRows)) cartRows = [cartRows];
-              
-              if (cartRows.length > 0) {
-                  // Import productService pour récupérer les détails n'est pas possible ici rapidement
-                  // Idéalement on ferait un cartService.formatCart() si besoin
-                  console.log("Vieux panier récupéré pour la session :", lastCartId);
+              // On recrée la structure locale pour refléter l'API et afficher le compteur panier.
+              try {
+                const formattedCart = await cartService.formatCart(lastCart);
+                if (formattedCart?.products?.length) {
+                  localCartService.setCart(newCustomerId, formattedCart.products);
+                }
+              } catch (formatError) {
+                console.warn('Impossible de reconstruire le panier local depuis le dernier panier.', formatError);
               }
            }
         }

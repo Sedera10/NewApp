@@ -2,6 +2,7 @@ import api from "./api";
 import { xmlToJson, jsonToXml, buildPrestashopXml } from "./Util";
 import { customerService } from "./Customer";
 import { getAddresseById } from "./Addresse";
+import { buildOrderXML } from "./xml/ordersXmlBuilder";
 
 const getTextVal = (val) => {
     if (val && typeof val === 'object' && val['#text'] !== undefined) {
@@ -170,6 +171,7 @@ export const commandeService = {
         const idCustomer = getTextVal(order.id_customer);
         const idAddressDelivery = getTextVal(order.id_address_delivery);
         const idState = getTextVal(order.current_state);
+        const idCart = getTextVal(order.id_cart);
 
         // Only fetch address if ID is valid
         let addressName = `Adresse #${idAddressDelivery}`;
@@ -187,6 +189,7 @@ export const commandeService = {
             id: getTextVal(order.id),
             idCustomer: idCustomer,
             reference: getTextVal(order.reference),
+            id_cart: idCart,
             total_paid: getTextVal(order.total_paid),
             payment: getTextVal(order.payment),
             date_add: getTextVal(order.date_add),
@@ -260,28 +263,41 @@ export const commandeService = {
       try {
           console.log('Order data received:', orderData);
 
-          const payload = {
-              id_cart: orderData.id_cart,
-              id_customer: orderData.id_customer,
-              id_address_delivery: orderData.id_address_delivery,
-              id_address_invoice: orderData.id_address_invoice || orderData.id_address_delivery,
-              id_currency: 1,
-              id_lang: 1,
-              id_carrier: orderData.id_carrier || 0,
-              payment: orderData.payment || 'Transfer',
-              module: orderData.module || 'bankwire',
-              conversion_rate: 1,
-              total_paid: parseFloat(orderData.total_paid.toFixed(2)),
-              total_paid_real: parseFloat((orderData.total_paid_real || orderData.total_paid).toFixed(2)),
-              total_products: parseFloat(orderData.total_products.toFixed(2)),
-              total_products_wt: parseFloat((orderData.total_products_wt || orderData.total_products).toFixed(2)),
-              total_shipping: parseFloat((orderData.total_shipping || 0).toFixed(2)),
-              total_shipping_tax_incl: parseFloat((orderData.total_shipping_tax_incl || orderData.total_shipping || 0).toFixed(2)),
-              current_state: 3 // 3 = "En cours de préparation" au lieu de 11 qui peut causer des erreurs selon la config PrestaShop
-          };
+        const totalPaid = Number.parseFloat(orderData.total_paid ?? 0) || 0;
+        const totalProducts = Number.parseFloat(orderData.total_products ?? 0) || 0;
+        const totalShipping = Number.parseFloat(orderData.total_shipping ?? 0) || 0;
+        const totalShippingTaxIncl = Number.parseFloat(orderData.total_shipping_tax_incl ?? totalShipping) || 0;
+        const payload = {
+          id_order: orderData.id_order,
+          id_cart: orderData.id_cart,
+          id_customer: orderData.id_customer,
+          id_address_delivery: orderData.id_address_delivery,
+          id_address_invoice: orderData.id_address_invoice || orderData.id_address_delivery,
+          id_currency: orderData.id_currency || 1,
+          id_lang: orderData.id_lang || 1,
+          id_carrier: orderData.id_carrier || 1,
+          payment: orderData.payment || 'Paiement a la livraison',
+          module: orderData.module || 'ps_cashondelivery',
+          current_state: orderData.current_state || 3,
+          total_paid: totalPaid,
+          total_paid_real: Number.parseFloat(orderData.total_paid_real ?? totalPaid) || totalPaid,
+          total_products: totalProducts,
+          total_products_wt: Number.parseFloat(orderData.total_products_wt ?? totalProducts) || totalProducts,
+          total_shipping: totalShipping,
+          total_shipping_tax_incl: totalShippingTaxIncl,
+          total_shipping_tax_excl: Number.parseFloat(orderData.total_shipping_tax_excl ?? totalShipping) || totalShipping,
+          total_discounts: Number.parseFloat(orderData.total_discounts ?? 0) || 0,
+          total_discounts_tax_incl: Number.parseFloat(orderData.total_discounts_tax_incl ?? 0) || 0,
+          total_discounts_tax_excl: Number.parseFloat(orderData.total_discounts_tax_excl ?? 0) || 0,
+          total_wrapping: Number.parseFloat(orderData.total_wrapping ?? 0) || 0,
+          total_wrapping_tax_incl: Number.parseFloat(orderData.total_wrapping_tax_incl ?? 0) || 0,
+          total_wrapping_tax_excl: Number.parseFloat(orderData.total_wrapping_tax_excl ?? 0) || 0,
+          conversion_rate: orderData.conversion_rate || 1,
+          secure_key: orderData.secure_key
+        };
 
           console.log('Order payload:', payload);
-          const xmlPayload = buildPrestashopXml('order', payload);
+        const xmlPayload = buildOrderXML(payload);
           console.log('XML Payload:', xmlPayload);
 
           const response = await api.post('/orders', xmlPayload, {

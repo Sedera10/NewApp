@@ -68,6 +68,7 @@ export const cartService = {
         const productsInfo = await Promise.all(cartRows.map(async (row) => {
             const productId = getTextVal(row.id_product);
             const qty = parseInt(getTextVal(row.quantity), 10) || 0;
+            const productAttributeId = parseInt(getTextVal(row.id_product_attribute), 10) || 0;
 
             if (productId) {
                 const rawProduct = await productService.getProductById(productId);
@@ -78,8 +79,10 @@ export const cartService = {
 
                     return {
                         id: productId,
+                        idProductAttribute: productAttributeId,
                         name: formattedProduct.name,
                         price: price,
+                        image: formattedProduct.image,
                         quantity: qty,
                         totalPrice: price * qty
                     };
@@ -173,33 +176,32 @@ export const cartService = {
 
     getUnorderedCarts: async (idCustomer) => {
         try {
-            // on trie pour avoir les plus récents
-            const response = await api.get(`/carts?display=full&filter[id_customer]=${idCustomer}&sort=[id_DESC]`);
-            const jsonObj = xmlToJson(response.data);
-            let carts = jsonObj?.prestashop?.carts?.cart;
-            
+            const [cartResponse, orderResponse] = await Promise.all([
+                api.get(`/carts?display=full&filter[id_customer]=${idCustomer}&sort=[id_DESC]`),
+                api.get('/orders?display=full')
+            ]);
+
+            const cartJson = xmlToJson(cartResponse.data);
+            const orderJson = xmlToJson(orderResponse.data);
+
+            let carts = cartJson?.prestashop?.carts?.cart;
+            let orders = orderJson?.prestashop?.orders?.order;
+
             if (!carts) return [];
-            
+
             const cartArray = Array.isArray(carts) ? carts : [carts];
-            const unorderedCarts = [];
-            
-            for (const cart of cartArray) {
-                const cartId = typeof cart.id === 'object' ? cart.id['#text'] : cart.id;
-                
-                // Vérifier si ce panier est dans une commande
-                try {
-                    const orderCheck = await api.get(`/orders?filter[id_cart]=${cartId}`);
-                    const orderJson = xmlToJson(orderCheck.data);
-                    if (!orderJson?.prestashop?.orders?.order) {
-                        // Pas de commande pour ce panier, il est disponible !
-                        unorderedCarts.push(cart);
-                    }
-                } catch (err) {
-                    // S'il y a une erreur ou 404, aucune commande trouvée, donc disponible.
-                    unorderedCarts.push(cart);
-                }
-            }
-            return unorderedCarts;
+            const orderArray = Array.isArray(orders) ? orders : orders ? [orders] : [];
+            const orderedCartIds = new Set(
+                orderArray
+                    .map((order) => getTextVal(order?.id_cart))
+                    .filter((cartId) => cartId !== null && cartId !== undefined && String(cartId).trim() !== '')
+                    .map((cartId) => String(cartId))
+            );
+
+            return cartArray.filter((cart) => {
+                const cartId = String(getTextVal(cart?.id) || '').trim();
+                return cartId && !orderedCartIds.has(cartId);
+            });
         } catch (error) {
             console.error(`Erreur getUnorderedCarts pour client ${idCustomer}:`, error);
             return [];
@@ -215,6 +217,11 @@ export const cartService = {
 // --- GESTION DU PANIER LOCAL (SESSION CLIENT) ---
 const getLocalCartKey = (customerId = 0) => `prestashop_local_cart_${customerId}`;
 
+const notifyCartUpdated = () => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new Event('local-cart-updated'));
+};
+
 export const localCartService = {
     getCart: (customerId = 0) => {
         const cartStr = localStorage.getItem(getLocalCartKey(customerId));
@@ -224,12 +231,14 @@ export const localCartService = {
     addToCart: (customerId = 0, product, quantity = 1) => {
         let cart = localCartService.getCart(customerId);
         const existingIndex = cart.findIndex(item => item.id === product.id);
+        const normalizedAttributeId = product?.idProductAttribute ?? product?.id_product_attribute ?? 0;
 
         if (existingIndex > -1) {
             cart[existingIndex].quantity += quantity;
         } else {
             cart.push({
                 id: product.id,
+                idProductAttribute: normalizedAttributeId,
                 name: product.name,
                 price: parseFloat(product.price),
                 image: product.image,
@@ -238,7 +247,23 @@ export const localCartService = {
         }
 
         localStorage.setItem(getLocalCartKey(customerId), JSON.stringify(cart));
+        notifyCartUpdated();
         return cart;
+    },
+
+    setCart: (customerId = 0, items = []) => {
+        const normalizedItems = Array.isArray(items) ? items.map((item) => ({
+            id: item.id,
+            idProductAttribute: item.idProductAttribute ?? item.id_product_attribute ?? 0,
+            name: item.name,
+            price: parseFloat(item.price || 0),
+            image: item.image || '',
+            quantity: parseInt(item.quantity, 10) || 0
+        })) : [];
+
+        localStorage.setItem(getLocalCartKey(customerId), JSON.stringify(normalizedItems));
+        notifyCartUpdated();
+        return normalizedItems;
     },
 
     updateQuantity: (customerId = 0, productId, quantity) => {
@@ -252,6 +277,7 @@ export const localCartService = {
                 cart[existingIndex].quantity = quantity;
             }
             localStorage.setItem(getLocalCartKey(customerId), JSON.stringify(cart));
+            notifyCartUpdated();
         }
         return cart;
     },
@@ -260,11 +286,13 @@ export const localCartService = {
         let cart = localCartService.getCart(customerId);
         cart = cart.filter(item => item.id !== productId);
         localStorage.setItem(getLocalCartKey(customerId), JSON.stringify(cart));
+        notifyCartUpdated();
         return cart;
     },
 
     clearCart: (customerId = 0) => {
         localStorage.removeItem(getLocalCartKey(customerId));
+        notifyCartUpdated();
     },
 
     getTotalAmount: (customerId = 0) => {

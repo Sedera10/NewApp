@@ -17,6 +17,7 @@ import ImportPage from './pages/backoffice/import/ImportPage'
 import LogOut from './pages/backoffice/login/LogOut'
 import ResetDataPage from './pages/backoffice/reset/ResetDataPage'
 import StockPage from './pages/backoffice/stock/StockPage'
+import ProductFiche from './pages/backoffice/product/ProductFiche'
 import CommandePageAdmin from './pages/backoffice/commande/Commande'
 import Dashboard from './pages/backoffice/dashboard/Dashboard'
 import ProtectedRoute from './components/auth/ProtectedRoute'
@@ -29,6 +30,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Navigate to="/mystore/fr" replace/>} />
+        <Route path="/mystore" element={<Navigate to="/mystore/fr" replace/>} />
         <Route path="/mystore/fr" element={<HomePage />} />
         <Route path="/mystore/fr/products" element={<ProductsPage />} />
         <Route path="/mystore/fr/product/:id" element={<ProductDetails />} />
@@ -39,7 +41,7 @@ function App() {
         <Route path="/mystore/fr/login"element={<Login />} />
         {/* Backoffice */}
         <Route path="/mystore/admin/login" element={<Login />} />
-        <Route path="/mystore/admin" element={<Layout />}>
+        <Route path="/mystore/admin" element={<Layout/>}>
           {/* Routes protégées */}
           <Route
             path="/mystore/admin/logout"
@@ -79,6 +81,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <StockPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mystore/admin/stock/:id"
+            element={
+              <ProtectedRoute>
+                <ProductFiche />
               </ProtectedRoute>
             }
           />
