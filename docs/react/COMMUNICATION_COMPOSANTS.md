@@ -102,6 +102,40 @@ export default function Child({ onSendMessage }) {
 - 🔴 Besoin d'une fonction callback
 - 🔴 Communication limitée à parent direct
 
+### Bonnes pratiques (flux enfant -> parent)
+- Nommer la prop d'action: `onChange`, `onSelect`, `onUpdate`.
+- Garder la logique metier dans le parent, l'enfant ne fait que notifier.
+- Utiliser `useCallback` si l'enfant est memoise.
+
+### Exemple robuste
+```jsx
+// Parent.jsx
+import { useCallback, useState } from 'react';
+
+export default function Parent() {
+  const [selectedId, setSelectedId] = useState('');
+
+  const handleSelect = useCallback((nextId) => {
+    setSelectedId(nextId);
+  }, []);
+
+  return <Child selectedId={selectedId} onSelect={handleSelect} />;
+}
+
+// Child.jsx
+export default function Child({ selectedId, onSelect }) {
+  return (
+    <button onClick={() => onSelect('42')}>
+      Selectionner 42 (actuel: {selectedId})
+    </button>
+  );
+}
+```
+
+### Exemple dans ce projet
+- Dans la fiche produit, la selection d'une declinaison remonte au parent.
+- Le parent recharge l'evolution du stock selon la declinaison choisie.
+
 ---
 
 ## 3. Props + State Lifting

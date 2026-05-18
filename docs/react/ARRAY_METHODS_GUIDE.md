@@ -113,3 +113,18 @@ console.log(totalPrice); // 80
 | Chercher le profil ID:5 | `.find()` | Un Objet `{}` |
 | Vérifier si une case est cochée | `.includes()` | Un Booléen `true`/`false` |
 | Faire la somme du panier | `.reduce()` | Un nombre final |
+
+---
+
+## Exemples projet
+
+### Filtrer les paniers non commandes
+```javascript
+const orderedIds = new Set(orders.map(o => String(o.id_cart)));
+const unordered = carts.filter(c => !orderedIds.has(String(c.id)));
+```
+
+### Trouver une declinaison selectionnee
+```javascript
+const selected = stockRows.find(row => String(row.idProductAttribute) === selectedId);
+```

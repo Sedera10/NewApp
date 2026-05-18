@@ -1,5 +1,10 @@
 # 🎉 Implémentation Complétée: Import ZIP Transactionnel
 
+## Mises a jour projet (18 mai 2026)
+- Evolution stock par declinaison activee (mode produit global disponible par commentaire).
+- Panier: synchronisation post-login et reprise depuis la liste des paniers.
+- Checkout: `secure_key` inclus dans la commande, nettoyage du `current_cart_id` apres succes.
+
 ## ✅ Résumé Exécutif
 
 Vous avez demandé:

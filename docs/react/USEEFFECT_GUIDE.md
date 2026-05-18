@@ -86,5 +86,19 @@ useEffect(() => {
 }, []);
 ```
 
+## 5. Exemple projet: ecouter un evenement custom
+Quand un service met a jour le localStorage, on peut notifier l'UI.
+
+```javascript
+useEffect(() => {
+  const refresh = () => {
+    // Recharger le compteur panier ou les donnees
+  };
+
+  window.addEventListener('local-cart-updated', refresh);
+  return () => window.removeEventListener('local-cart-updated', refresh);
+}, []);
+```
+
 ## 🎯 En résumé
 `useEffect` est ton meilleur ami pour **charger la donnée au chargement de la page** (via `[]`). Ne fais jamais de calculs complexes ou d'appels API directement dans ton composant en dehors d'un useEffect (ou d'une fonction onClick).

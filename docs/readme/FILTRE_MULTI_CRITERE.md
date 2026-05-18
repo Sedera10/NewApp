@@ -1,5 +1,9 @@
 # Implémentation du Filtre Multi-Critère et Arbre de Catégories
 
+## Mises a jour projet (18 mai 2026)
+- Le filtrage reste post-fetch pour gerer les limites API PrestaShop.
+- Utilise toujours les associations de categories (parent/enfant).
+
 Ce document explique l'approche technique choisie pour la recherche multi-critères, le filtrage imbriqué parent/enfant, ainsi que l'interface de sélection au survol.
 
 ## 1. Concept Global : Approche Hybride API / Client

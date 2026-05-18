@@ -1,5 +1,10 @@
 # Résumé des Modifications - Import ZIP avec Logique Transactionnelle
 
+## Notes projet (18 mai 2026)
+- Evolution stock par declinaison activee (mode produit global disponible).
+- Panier: reconstruction locale apres login.
+- Checkout: commande creee avec `secure_key`.
+
 ## 📋 Fichiers Modifiés
 
 ### 1. **src/service/Util.js**

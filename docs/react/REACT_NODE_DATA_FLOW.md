@@ -1,5 +1,8 @@
 # 🔄 Flux de données : De React au Backend (PostgreSQL)
 
+## Note projet
+Ce projet utilise l'API PrestaShop (XML) et non un backend Node/Express local. Ce guide reste utile pour comprendre le flux HTTP, mais les appels partent vers les endpoints PrestaShop via `api` dans `src/service`.
+
 Ce guide détaille le flux complet d'une donnée, depuis sa saisie dans un formulaire React jusqu'à son stockage dans une base de données PostgreSQL, puis son retour au frontend. C'est le cycle de vie **Requête / Réponse (Request / Response)**.
 
 ## 🗺️ Vue d'ensemble du flux

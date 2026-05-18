@@ -1,5 +1,42 @@
 # Manifeste des Changements - Import ZIP Transactionnel
 
+## 📅 Date: 18 mai 2026
+
+## 🎯 Objectif
+Stabiliser le stock journalier et renforcer le flux panier/commande.
+
+---
+
+## 📦 Fichiers Modifies (18 mai 2026)
+
+### 1. `src/service/Product.js`
+- Calcul des dates en UTC pour l'evolution du stock.
+- Mode declinaison actif (filtre `id_product_attribute`), mode produit global en commentaire.
+
+### 2. `src/pages/backoffice/product/ProductFiche.jsx`
+- Evolution stock par declinaison activee.
+- Ajout des signes + / - pour entree et sortie.
+
+### 3. `src/service/cartService.js`
+- Ajout `local-cart-updated` pour rafraichir l'UI panier.
+- Ajout `setCart()` pour reconstruire le panier local.
+
+### 4. `src/service/authService.js`
+- Reconstruction du panier local a partir du dernier panier API lors du login.
+
+### 5. `src/pages/frontoffice/commande/Commande.jsx`
+- Reprise d'un panier: synchronisation API -> local.
+
+### 6. `src/pages/frontoffice/checkout/CheckoutPage.jsx`
+- Ajout `secure_key` dans la creation de commande.
+- Conservation de `current_cart_id` jusqu'au succes.
+- Nettoyage du panier et `current_cart_id` apres succes.
+
+### 7. `src/components/layout/Header.jsx`
+- Ecoute de l'evenement `local-cart-updated` pour le compteur panier.
+
+---
+
 ## 📅 Date: 16 mai 2026
 
 ## 🎯 Objectif

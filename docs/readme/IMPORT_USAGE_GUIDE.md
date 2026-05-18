@@ -1,5 +1,10 @@
 # Guide d'Utilisation - Import ZIP Transactionnel
 
+## Notes projet (18 mai 2026)
+- Evolution stock par declinaison activee dans la fiche produit.
+- Panier: reprise possible depuis la page commandes.
+- Checkout: `secure_key` inclus a la creation de commande.
+
 ## 🎯 Objectif
 
 Importer des données en 4 étapes avec garantie **"TOUT OU RIEN"** :

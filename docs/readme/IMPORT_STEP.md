@@ -1,5 +1,9 @@
 # Étapes de l’import de données
 
+## Notes projet (18 mai 2026)
+- Le stock journalier peut etre consulte par declinaison ou produit global.
+- Le flux panier/commande a ete renforce (sync post-login, reprise panier, creation commande avec `secure_key`).
+
 ## `importFile1(csvFile, onProgress)`
 Importe les **produits de base**.
 

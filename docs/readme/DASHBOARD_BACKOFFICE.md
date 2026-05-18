@@ -1,5 +1,9 @@
 # Création et Calcul du Tableau de Bord (Dashboard)
 
+## Mises a jour projet (18 mai 2026)
+- Evolution stock: mode declinaison actif dans la fiche produit.
+- Panier/commande: reprise panier et creation de commande avec `secure_key`.
+
 Ce document explique la mise en place du tableau de bord (Dashboard) pour l'espace administrateur (Back-Office), ainsi que la logique mathématique et algorithmique utilisée pour générer les statistiques de la boutique.
 
 ## 1. Architecture et Intégration

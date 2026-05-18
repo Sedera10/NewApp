@@ -1,5 +1,10 @@
 # Documentation: Logique Transactionnelle d'Import
 
+## Notes projet (18 mai 2026)
+- Evolution stock: calculs en UTC pour eviter les gels navigateur.
+- Panier: synchronisation locale apres login et reprise panier.
+- Checkout: commande creee avec `secure_key` et nettoyage du panier local apres succes.
+
 ## Vue d'ensemble
 
 Le système d'import de données fonctionne selon un modèle **"TOUT OU RIEN"** (All-or-Nothing Transaction):

@@ -1,4 +1,9 @@
-# 📚 Index de Documentation - Import ZIP Transactionnel
+# 📚 Index de Documentation - Projet NewApp
+
+## Mises a jour (18 mai 2026)
+- Evolution stock: mode declinaison actif, mode produit global disponible par commentaire.
+- Panier: synchronisation post-login, reprise panier depuis la liste, compteur mis a jour en temps reel.
+- Checkout: `secure_key` inclus a la creation de commande, `current_cart_id` nettoye apres succes.
 
 ## Navigation Rapide
 
@@ -9,7 +14,7 @@
 
 ### 👤 Pour l'Utilisateur Final
 **→ Guide d'utilisation complet:**
-- [docs/IMPORT_USAGE_GUIDE.md](./docs/IMPORT_USAGE_GUIDE.md)
+- [IMPORT_USAGE_GUIDE.md](./IMPORT_USAGE_GUIDE.md)
   - Tutorial pas à pas
   - Format des fichiers CSV
   - Création du ZIP d'images
@@ -18,7 +23,7 @@
 
 ### 👨‍💻 Pour le Développeur
 **→ Documentation technique:**
-- [docs/IMPORT_TRANSACTION_GUIDE.md](./docs/IMPORT_TRANSACTION_GUIDE.md)
+- [IMPORT_TRANSACTION_GUIDE.md](./IMPORT_TRANSACTION_GUIDE.md)
   - Architecture système
   - Flux d'exécution
   - Code examples
@@ -35,6 +40,18 @@
   - Dépendances ajoutées
   - Validation build
   - Points clés
+
+### 🧭 Maitrise du projet
+- [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md)
+  - Architecture globale
+  - Services cles
+  - Routes principales
+- [CART_CHECKOUT_FLOW.md](./CART_CHECKOUT_FLOW.md)
+  - Auth -> panier -> checkout -> commande
+  - Synchronisation API / localStorage
+- [STOCK_EVOLUTION_GUIDE.md](./STOCK_EVOLUTION_GUIDE.md)
+  - Evolution stock par produit / declinaison
+  - Sources des donnees
 
 ### 🧪 Pour Tester
 **→ Scripts et ressources:**
@@ -258,6 +275,15 @@ VITE_RESOURCES_TO_WIPE=products,categories,taxes,...
 | [docs/IMPORT_USAGE_GUIDE.md](./docs/IMPORT_USAGE_GUIDE.md) | Users | 15 min |
 | [docs/IMPORT_TRANSACTION_GUIDE.md](./docs/IMPORT_TRANSACTION_GUIDE.md) | Developers | 20 min |
 | [CHANGES_MANIFEST.md](./CHANGES_MANIFEST.md) | Tech Leads | 15 min |
+
+---
+
+## Guides React
+- [../react/COMMUNICATION_COMPOSANTS.md](../react/COMMUNICATION_COMPOSANTS.md)
+- [../react/CHILD_PARENT_FLOW.md](../react/CHILD_PARENT_FLOW.md)
+- [../react/USEEFFECT_GUIDE.md](../react/USEEFFECT_GUIDE.md)
+- [../react/ARRAY_METHODS_GUIDE.md](../react/ARRAY_METHODS_GUIDE.md)
+- [../react/REACT_NODE_DATA_FLOW.md](../react/REACT_NODE_DATA_FLOW.md)
 
 ---
 

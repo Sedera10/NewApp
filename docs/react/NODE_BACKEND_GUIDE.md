@@ -1,5 +1,8 @@
 # 🚀 Guide de création d'un Backend Node.js (API REST + Base de Données)
 
+## Note projet
+Ce projet consomme l'API PrestaShop (XML) et n'integre pas de backend Node local. Ce guide reste utile si tu veux ajouter un backend complementaire.
+
 Voici les étapes clés pour configurer un backend Node.js robuste, structuré et prêt pour la production.
 
 ---
