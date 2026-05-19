@@ -369,13 +369,18 @@ export const commandeService = {
 
   updateOrderStatus: async (idOrder, idOrderState) => {
       try {
-          const payload = {
-              id_order: idOrder,
-          id_order_state: idOrderState,
-          date_add: new Date().toISOString().replace('T', ' ').slice(0, 19)
-          };
-
-        const xmlPayload = buildPrestashopXml('order_state_update', payload);
+        console.info('order_state_update.create', {
+          idOrder,
+          idOrderState
+        });
+        const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
+<prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
+  <order_state_update>
+    <id_order><![CDATA[${idOrder}]]></id_order>
+    <id_order_state><![CDATA[${idOrderState}]]></id_order_state>
+    <date_add><![CDATA[${new Date().toISOString().replace('T', ' ').slice(0, 19)}]]></date_add>
+  </order_state_update>
+</prestashop>`;
 
         await api.post('/order_state_update', xmlPayload, {
               headers: {

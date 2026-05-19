@@ -1387,18 +1387,33 @@ const createOrderStateUpdate = async ({ id_order, id_order_state, date_add }) =>
     id_order_state,
     date_add
   });
-  const xml = buildOrderHistoryXML({
-    id_order,
-    id_order_state,
-    date_add: date_add || new Date().toISOString().replace('T', ' ').slice(0, 19)
-  });
-  const response = await prestashopApi.createResource('order_histories', xml);
-  console.info('order_state_update.response', {
-    id_order,
-    id_order_state,
-    hasResponse: Boolean(response)
-  });
-  return response;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
+  <order_state_update>
+    <id_order><![CDATA[${id_order}]]></id_order>
+    <id_order_state><![CDATA[${id_order_state}]]></id_order_state>
+    <date_add><![CDATA[${date_add || new Date().toISOString().replace('T', ' ').slice(0, 19)}]]></date_add>
+  </order_state_update>
+</prestashop>`;
+  try {
+    const response = await prestashopApi.createResource('order_state_update', xml);
+    console.info('order_state_update.response', {
+      id_order,
+      id_order_state,
+      hasResponse: Boolean(response)
+    });
+    return response;
+  } catch (error) {
+    const status = error?.response?.status;
+    const responseData = error?.response?.data;
+    console.warn('order_state_update.failed', {
+      id_order,
+      id_order_state,
+      status,
+      responseData: typeof responseData === 'string' ? responseData : JSON.stringify(responseData)
+    });
+    throw error;
+  }
 };
 
 
@@ -1771,6 +1786,8 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
               targetStateId = cancelledStateId;
             } else if (normalizedStatus.startsWith('livr')) {
               targetStateId = deliveredStateId;
+            } else if (normalizedStatus.includes('paiement') || normalizedStatus.includes('payment')) {
+              targetStateId = paidStateId;
             }
 
             // CONDITION: Si etat === "dans le panier" OU vide, créer SEULEMENT le cart (pas la commande)
@@ -1787,6 +1804,7 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
                 module: CONSTANTS.PAYMENT_MODULE,
                 payment: CONSTANTS.PAYMENT_LABEL,
                 secure_key: secureKey,
+                current_state: targetStateId || paidStateId,
                 date_add: `${dateCmd} 00:00:00`,
                 date_upd: `${dateCmd} 00:00:00`,
                 total_paid: roundDecimal(totalPaid),
@@ -1867,6 +1885,7 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
                   secure_key: getPrimitiveValue(freshOrder?.secure_key) || secureKey,
                   module: CONSTANTS.PAYMENT_MODULE,
                   payment: getPrimitiveValue(freshOrder?.payment) || CONSTANTS.PAYMENT_LABEL,
+                  current_state: targetStateId || paidStateId,
                   date_add: `${dateCmd} 00:00:00`,
                   date_upd: `${dateCmd} 00:00:00`,
                   total_paid: roundDecimal(totalPaid),
