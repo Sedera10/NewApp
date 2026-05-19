@@ -1380,24 +1380,24 @@ const getExistingOrderStateId = (stateName, orderStates) => {
   return fallbackMatch?.id ? (Number.parseInt(fallbackMatch.id, 10) || null) : null;
 };
 
-const createOrderStateUpdate = async ({ id_order, id_order_state, date_add }) => {
+const createOrderStateChange = async ({ id_order, id_order_state, date_add }) => {
   if (!id_order || !id_order_state) return null;
-  console.info('order_state_update.create', {
+  console.info('order_state_change.create', {
     id_order,
     id_order_state,
     date_add
   });
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
-  <order_state_update>
+  <order_state_change>
     <id_order><![CDATA[${id_order}]]></id_order>
     <id_order_state><![CDATA[${id_order_state}]]></id_order_state>
     <date_add><![CDATA[${date_add || new Date().toISOString().replace('T', ' ').slice(0, 19)}]]></date_add>
-  </order_state_update>
+  </order_state_change>
 </prestashop>`;
   try {
-    const response = await prestashopApi.createResource('order_state_update', xml);
-    console.info('order_state_update.response', {
+    const response = await prestashopApi.createResource('order_state_changes', xml);
+    console.info('order_state_change.response', {
       id_order,
       id_order_state,
       hasResponse: Boolean(response)
@@ -1406,7 +1406,7 @@ const createOrderStateUpdate = async ({ id_order, id_order_state, date_add }) =>
   } catch (error) {
     const status = error?.response?.status;
     const responseData = error?.response?.data;
-    console.warn('order_state_update.failed', {
+    console.warn('order_state_change.failed', {
       id_order,
       id_order_state,
       status,
@@ -1781,11 +1781,14 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
             const deliveredStateId = getExistingOrderStateId('livre', orderStates) || getExistingOrderStateId('livré', orderStates) || 5;
             const cancelledStateId = getExistingOrderStateId('annule', orderStates) || getExistingOrderStateId('annulé', orderStates) || 6;
             let targetStateId = null;
+            let shouldApplyStateChange = false;
 
             if (normalizedStatus.startsWith('annul')) {
               targetStateId = cancelledStateId;
+              shouldApplyStateChange = true;
             } else if (normalizedStatus.startsWith('livr')) {
               targetStateId = deliveredStateId;
+              shouldApplyStateChange = true;
             } else if (normalizedStatus.includes('paiement') || normalizedStatus.includes('payment')) {
               targetStateId = paidStateId;
             }
@@ -1836,32 +1839,32 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
 
               console.log(`✓ Commande créée: ${email} (Order ID: ${orderId})`);
 
-              if (targetStateId) {
+              if (targetStateId && shouldApplyStateChange) {
                 try {
-                  await createOrderStateUpdate({
+                  await createOrderStateChange({
                     id_order: orderId,
                     id_order_state: targetStateId,
                     date_add: `${dateCmd} 00:00:00`
                   });
                   const [updatedOrder] = await prestashopApi.getResources('orders', orderId, null, { display: 'full' });
                   const updatedState = getPrimitiveValue(updatedOrder?.current_state);
-                  console.info('order_state_update.result', {
+                  console.info('order_state_change.result', {
                     orderId,
                     targetStateId,
                     current_state: updatedState
                   });
                   if (String(updatedState) === '0') {
-                    console.warn('order_state_update.still_zero', {
+                    console.warn('order_state_change.still_zero', {
                       orderId,
                       targetStateId
                     });
                   }
                   if (targetStateId === deliveredStateId) {
-                    console.log(`INFO stock movement auto module: commande ${orderId} livre`);
+                    console.log(`INFO stock movement via module: commande ${orderId} livre`);
                   }
                 } catch (stateError) {
-                  console.warn(`⚠️ Impossible de mettre a jour l'etat pour la commande ${orderId}:`, stateError.message);
-                  results.errors.push(`Commande ${orderId}: etat non mis a jour (${stateError.message})`);
+                  console.warn(`⚠️ Impossible de traiter l'etat pour la commande ${orderId}:`, stateError.message);
+                  results.errors.push(`Commande ${orderId}: etat non traite (${stateError.message})`);
                 }
               }
 

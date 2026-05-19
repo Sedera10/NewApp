@@ -165,7 +165,7 @@ export default function Commande() {
                           </td>
                           <td>
                             <p className="text-sm font-weight-bold mb-0">
-                              {Number(order.total_paid || 0).toFixed(2)} Ar
+                              {Number(order.total_paid || 0).toFixed(2)} €
                             </p>
                           </td>
                           <td>

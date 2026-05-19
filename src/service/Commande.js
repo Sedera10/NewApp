@@ -369,20 +369,20 @@ export const commandeService = {
 
   updateOrderStatus: async (idOrder, idOrderState) => {
       try {
-        console.info('order_state_update.create', {
+        console.info('order_state_change.create', {
           idOrder,
           idOrderState
         });
         const xmlPayload = `<?xml version="1.0" encoding="UTF-8"?>
 <prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
-  <order_state_update>
+  <order_state_change>
     <id_order><![CDATA[${idOrder}]]></id_order>
     <id_order_state><![CDATA[${idOrderState}]]></id_order_state>
     <date_add><![CDATA[${new Date().toISOString().replace('T', ' ').slice(0, 19)}]]></date_add>
-  </order_state_update>
+  </order_state_change>
 </prestashop>`;
 
-        await api.post('/order_state_update', xmlPayload, {
+        await api.post('/order_state_changes', xmlPayload, {
               headers: {
                   'Content-Type': 'application/xml'
               }
@@ -390,7 +390,14 @@ export const commandeService = {
 
           return true;
       } catch (error) {
-          console.error("Error updating order status:", error);
+          const status = error?.response?.status;
+          const responseData = error?.response?.data;
+          console.error('order_state_change.failed', {
+            idOrder,
+            idOrderState,
+            status,
+            responseData: typeof responseData === 'string' ? responseData : JSON.stringify(responseData)
+          });
           throw error;
       }
   }
