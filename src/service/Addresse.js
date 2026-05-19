@@ -40,7 +40,7 @@ export const getAddressesByCustomerId = async (customerId) => {
     const customerIdStr = String(customerId).trim();
     const filtered = addresses.filter(addr => {
       const addrCustomerId = String(getTextVal(addr.id_customer)).trim();
-      console.log(`Comparing: "${addrCustomerId}" === "${customerIdStr}" (addr.id = ${getTextVal(addr.id)})`);
+      // console.log(`Comparing: "${addrCustomerId}" === "${customerIdStr}" (addr.id = ${getTextVal(addr.id)})`);
       return addrCustomerId === customerIdStr;
     });
 

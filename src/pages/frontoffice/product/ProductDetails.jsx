@@ -60,7 +60,7 @@ const ProductDetails = () => {
 
   const handleAddToCart = async () => {
     const currentUser = JSON.parse(localStorage.getItem('client_session'));
-    const customerId = currentUser?.id || 1; // 1 = anonyme par défaut
+    const customerId = currentUser?.id ?? 0;
 
     const priceToAdd = (attributSelected && attributSelected.priceTTC !== '0.00') ? attributSelected.priceTTC : (product?.priceTTC || product?.price || '0.00');
     

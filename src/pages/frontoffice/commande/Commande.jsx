@@ -40,6 +40,11 @@ export default function CommandePage() {
         setCustomer(connectedCustomer);
         const customerId = connectedCustomer.id;
 
+        if (!customerId || String(customerId) === '0') {
+          navigate('/mystore/fr');
+          return;
+        }
+
         const allCommandes = await commandeService.getCommandes();
         const lesPaniersRaw = await cartService.getUnorderedCarts(customerId);
         const lesPaniersFormatted = await Promise.all((lesPaniersRaw || []).map(cart => cartService.formatCart(cart)));
@@ -49,7 +54,6 @@ export default function CommandePage() {
         );
 
         setPaniers(lesPaniersFormatted.filter(Boolean));
-        console.log("Panier non associé : " , lesPaniersFormatted.filter(Boolean));
 
         setCommandes(customerCommandes);
 

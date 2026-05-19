@@ -53,7 +53,7 @@ export const cartService = {
 
         let customerName = `Client #${idCustomer}`;
         try {
-            if (idCustomer !== '0') {
+            if (String(idCustomer) !== '0') {
                 const customer = await customerService.getCustomerById(idCustomer);
                 customerName = `${customer.firstname} ${customer.lastname}`;
             } else {
@@ -174,6 +174,17 @@ export const cartService = {
         }
     },
 
+    deleteCart: async (idCart) => {
+        try {
+            await api.delete(`/carts/${idCart}`);
+            return true;
+        } catch (error) {
+            console.error(`Erreur lors de la suppression du panier ${idCart}:`, error);
+            console.error("Error response data:", error.response?.data);
+            return false;
+        }
+    },
+
     getUnorderedCarts: async (idCustomer) => {
         try {
             const [cartResponse, orderResponse] = await Promise.all([
@@ -208,8 +219,47 @@ export const cartService = {
         }
     },
 
+    getUnorderedCartsAnonymous: async () => {
+        try {
+            const [cartResponse, orderResponse] = await Promise.all([
+                api.get('/carts?display=full&filter[id_customer]=0&sort=[id_DESC]'),
+                api.get('/orders?display=full')
+            ]);
+
+            const cartJson = xmlToJson(cartResponse.data);
+            const orderJson = xmlToJson(orderResponse.data);
+
+            let carts = cartJson?.prestashop?.carts?.cart;
+            let orders = orderJson?.prestashop?.orders?.order;
+
+            if (!carts) return [];
+
+            const cartArray = Array.isArray(carts) ? carts : [carts];
+            const orderArray = Array.isArray(orders) ? orders : orders ? [orders] : [];
+            const orderedCartIds = new Set(
+                orderArray
+                    .map((order) => getTextVal(order?.id_cart))
+                    .filter((cartId) => cartId !== null && cartId !== undefined && String(cartId).trim() !== '')
+                    .map((cartId) => String(cartId))
+            );
+
+            return cartArray.filter((cart) => {
+                const cartId = String(getTextVal(cart?.id) || '').trim();
+                return cartId && !orderedCartIds.has(cartId);
+            });
+        } catch (error) {
+            console.error('Erreur getUnorderedCartsAnonymous:', error);
+            return [];
+        }
+    },
+
     getLastCart: async (idCustomer) => {
         const unorderedCarts = await cartService.getUnorderedCarts(idCustomer);
+        return unorderedCarts.length > 0 ? unorderedCarts[0] : null;
+    },
+
+    getLastAnonymousCart: async () => {
+        const unorderedCarts = await cartService.getUnorderedCartsAnonymous();
         return unorderedCarts.length > 0 ? unorderedCarts[0] : null;
     }
 };

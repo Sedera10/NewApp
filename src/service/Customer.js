@@ -9,9 +9,12 @@ export const customerService = {
   },
 
   getCustomerById: async (id) => {
-    const response = await api.get(`/customers/${id}?display=full`);
+    if (!id || String(id) === '0') return null;
+    const response = await api.get(`/customers?display=full&filter[id]=[${id}]`);
     const jsonObj = xmlToJson(response.data);
-    return jsonObj.prestashop.customer; 
+    const customers = jsonObj?.prestashop?.customers?.customer || [];
+    if (Array.isArray(customers)) return customers[0] || null;
+    return customers || null;
   },
 
   getCustomerByEmail: async (email) => {

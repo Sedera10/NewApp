@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customerService } from '../../../service/Customer';
+import { localCartService, cartService } from '../../../service/Cart';
+import { syncCartAfterAuth } from '../../../service/authService';
 import { MdPerson } from 'react-icons/md';
 import './HomePage.css';
 
@@ -35,26 +37,84 @@ const HomePage = () => {
     return val;
   };
 
-  const handleSelectUser = (user) => {
+  const ensureVisitorCart = async () => {
+    try {
+      const visitorId = 0;
+      const localItems = localCartService.getCart(visitorId);
+      let currentCartId = localStorage.getItem(`current_cart_id_${visitorId}`);
+
+      if (localItems.length > 0 && !currentCartId) {
+        const itemsToApi = localItems.map(item => ({
+          id_product: item.id,
+          id_product_attribute: item.idProductAttribute || item.id_product_attribute || 0,
+          quantity: item.quantity,
+          id_address_delivery: 0
+        }));
+        const createdCart = await cartService.createCart(visitorId, itemsToApi, 1, 1, 0);
+        if (createdCart?.id) {
+          const createdId = typeof createdCart.id === 'object' ? createdCart.id['#text'] : createdCart.id;
+          localStorage.setItem(`current_cart_id_${visitorId}`, createdId);
+          currentCartId = createdId;
+        }
+      }
+
+      if (localItems.length === 0 && !currentCartId) {
+        const lastCart = await cartService.getLastAnonymousCart();
+        if (lastCart) {
+          const lastCartId = typeof lastCart.id === 'object' ? lastCart.id['#text'] : lastCart.id;
+          localStorage.setItem(`current_cart_id_${visitorId}`, lastCartId);
+          currentCartId = lastCartId;
+
+          const formattedCart = await cartService.formatCart(lastCart);
+          localCartService.setCart(visitorId, formattedCart?.products || []);
+        } else {
+          const createdCart = await cartService.createCart(visitorId, [], 1, 1, 0);
+          if (createdCart?.id) {
+            const createdId = typeof createdCart.id === 'object' ? createdCart.id['#text'] : createdCart.id;
+            localStorage.setItem(`current_cart_id_${visitorId}`, createdId);
+            currentCartId = createdId;
+          }
+          localCartService.setCart(visitorId, []);
+        }
+      }
+
+      console.log('Panier courant visiteur:', {
+        customerId: visitorId,
+        currentCartId,
+        items: localCartService.getCart(visitorId),
+        totalItems: localCartService.getTotalItems(visitorId)
+      });
+    } catch (error) {
+      console.error('Erreur lors de la creation du panier visiteur:', error);
+    }
+  };
+
+  const handleSelectUser = async (user) => {
+    let sessionData;
     if (user) {
-      const sessionData = {
+      sessionData = {
         id: getTextVal(user.id),
         firstname: getTextVal(user.firstname),
         lastname: getTextVal(user.lastname),
         email: getTextVal(user.email),
         isLoggedIn: true
       };
-      localStorage.setItem('client_session', JSON.stringify(sessionData));
     } else {
-      const sessionData = {
-        id: null,
+      sessionData = {
+        id: 0,
         firstname: "Visteur",
         lastname: "Anonyme",
         email: "",
         type: 2,
         isLoggedIn: true
       };
-      localStorage.setItem('client_session', JSON.stringify(sessionData));
+    }
+
+    localStorage.setItem('client_session', JSON.stringify(sessionData));
+    if (sessionData.id !== 0) {
+      await syncCartAfterAuth(sessionData);
+    } else {
+      await ensureVisitorCart();
     }
     navigate('/mystore/fr/products');
   };

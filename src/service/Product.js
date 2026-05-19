@@ -303,13 +303,21 @@ const toDateNumber = (dateKey) => {
   return baseDate ? baseDate.getTime() : Number.NaN;
 };
 
-const normalizeDeltaRows = (rows) => ensureArray(rows).map((row) => ({
-  id: getTextValue(row?.id),
-  idProduct: getNumericValue(row?.id_product, 0),
-  idProductAttribute: getNumericValue(row?.id_product_attribute, 0),
-  delta: Number.parseFloat(getTextValue(row?.delta) || 0) || 0,
-  dateAdd: normalizeDateKey(row?.date_add || row?.date_upd || row?.date || row?.created_at)
-}));
+const normalizeMovementRows = (rows) => ensureArray(rows).map((row) => {
+  const explicitDelta = Number.parseFloat(getTextValue(row?.delta));
+  const quantity = Number.parseFloat(getTextValue(row?.physical_quantity || row?.quantity) || 0) || 0;
+  const sign = Number.parseFloat(getTextValue(row?.sign));
+  const derivedDelta = Number.isNaN(sign) ? quantity : quantity * sign;
+  const delta = Number.isNaN(explicitDelta) ? derivedDelta : explicitDelta;
+
+  return {
+    id: getTextValue(row?.id),
+    idProduct: getNumericValue(row?.id_product, 0),
+    idProductAttribute: getNumericValue(row?.id_product_attribute, 0),
+    delta: Number.isFinite(delta) ? delta : 0,
+    dateAdd: normalizeDateKey(row?.date_add || row?.date_upd || row?.date || row?.created_at)
+  };
+});
 
 const aggregateMovementsByDate = (rows, labelsByAttribute = {}) => rows.reduce((acc, row) => {
   if (!row.dateAdd) return acc;
@@ -348,6 +356,29 @@ const aggregateMovementsByDate = (rows, labelsByAttribute = {}) => rows.reduce((
 
   return acc;
 }, {});
+
+const buildStockAvailableUpdateXml = (stockRow, overrides = {}) => {
+  const getField = (field, fallback = '') => {
+    const value = stockRow?.[field];
+    const textValue = getTextValue(value);
+    return textValue !== undefined && textValue !== null ? textValue : fallback;
+  };
+
+  const payload = {
+    id: overrides.id ?? getField('id'),
+    id_product: overrides.id_product ?? getField('id_product'),
+    id_product_attribute: overrides.id_product_attribute ?? getField('id_product_attribute', 0),
+    id_shop: overrides.id_shop ?? getField('id_shop', 1),
+    id_shop_group: overrides.id_shop_group ?? getField('id_shop_group', 0),
+    quantity: overrides.quantity ?? getField('quantity', 0),
+    physical_quantity: overrides.physical_quantity ?? getField('physical_quantity', overrides.quantity ?? 0),
+    reserved_quantity: overrides.reserved_quantity ?? getField('reserved_quantity', 0),
+    depends_on_stock: overrides.depends_on_stock ?? getField('depends_on_stock', 0),
+    out_of_stock: overrides.out_of_stock ?? getField('out_of_stock', 0)
+  };
+
+  return buildPrestashopXml('stock_available', payload);
+};
 
 const resolveDailyEvolution = ({
   startDate,
@@ -439,16 +470,114 @@ const resolveDailyEvolution = ({
   return dates.map((date) => rowsByDate.get(date)).filter(Boolean);
 };
 
-const getStockDeltas = async (productId) => {
+const getStockMovements = async (productId, productAttributeId = 0) => {
   try {
-    let url = `/stock_deltas?display=full&filter[id_product]=[${productId}]`;
+    const stockResponse = await api.get(`/stock_availables?display=full&filter[id_product]=[${productId}]`);
+    const stockJson = xmlToJson(stockResponse.data);
+    let stockRows = stockJson?.prestashop?.stock_availables?.stock_available;
+    if (!Array.isArray(stockRows)) {
+      stockRows = stockRows ? [stockRows] : [];
+    }
 
-    const response = await api.get(url);
-    const jsonObj = xmlToJson(response.data);
-    const deltas = jsonObj?.prestashop?.stock_deltas?.stock_delta || [];
-    return ensureArray(deltas);
+    const selectedStock = stockRows.find((row) => getNumericValue(row?.id_product_attribute, 0) === (Number.parseInt(productAttributeId, 10) || 0))
+      || stockRows[0];
+    const stockId = getNumericValue(selectedStock?.id, null);
+    const attrByStockId = stockRows.reduce((acc, row) => {
+      const rowStockId = getNumericValue(row?.id, null);
+      if (rowStockId !== null) {
+        acc[String(rowStockId)] = getNumericValue(row?.id_product_attribute, 0);
+      }
+      return acc;
+    }, {});
+
+      const filter = stockId ? `filter[id_stock]=[${stockId}]` : `filter[id_product]=[${productId}]`;
+      const url = `/stock_movements?display=full&output_format=JSON&${filter}`;
+      console.info('stock_movements.fetch', {
+        productId,
+        productAttributeId,
+        stockId,
+        url
+      });
+
+      const response = await api.get(url);
+      const rawData = response.data;
+      const jsonObj = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      let movements = ensureArray(
+        jsonObj?.stock_movements?.stock_movement
+        || jsonObj?.prestashop?.stock_movements?.stock_movement
+        || jsonObj?.stock_mvts?.stock_movement
+        || jsonObj?.stock_mvts?.stock_mvt
+        || jsonObj?.stock_mvts
+        || []
+      );
+      if (!movements.length) {
+        console.info('stock_movements.empty', {
+          topKeys: jsonObj && typeof jsonObj === 'object' ? Object.keys(jsonObj) : typeof jsonObj,
+          hasPrestashop: Boolean(jsonObj?.prestashop),
+          stockMvtsKeys: jsonObj?.stock_mvts && typeof jsonObj.stock_mvts === 'object'
+            ? Object.keys(jsonObj.stock_mvts)
+            : null
+        });
+      }
+
+      if (!movements.length) {
+        const fallbackUrl = '/stock_movements?display=full&output_format=JSON';
+        console.info('stock_movements.fallback', {
+          productId,
+          productAttributeId,
+          stockId,
+          url: fallbackUrl
+        });
+        const fallbackResponse = await api.get(fallbackUrl);
+        const fallbackRaw = fallbackResponse.data;
+        const fallbackJson = typeof fallbackRaw === 'string' ? JSON.parse(fallbackRaw) : fallbackRaw;
+        movements = ensureArray(
+          fallbackJson?.stock_movements?.stock_movement
+          || fallbackJson?.prestashop?.stock_movements?.stock_movement
+          || fallbackJson?.stock_mvts?.stock_movement
+          || fallbackJson?.stock_mvts?.stock_mvt
+          || fallbackJson?.stock_mvts
+          || []
+        ).filter((row) => {
+          const rowStockId = getNumericValue(row?.id_stock, null);
+          const rowProductId = getNumericValue(row?.id_product, null);
+          if (stockId !== null) {
+            return rowStockId === stockId;
+          }
+          return rowProductId === Number.parseInt(productId, 10);
+        });
+      }
+
+      movements = movements.map((row) => {
+        const movementAttrId = getNumericValue(row?.id_product_attribute, null);
+        if (movementAttrId !== null) {
+          return row;
+        }
+
+        const movementStockId = getNumericValue(row?.id_stock, null);
+        if (movementStockId === null) {
+          return row;
+        }
+
+        return {
+          ...row,
+          id_product_attribute: attrByStockId[String(movementStockId)] ?? 0
+        };
+      });
+      console.info('stock_movements.result', {
+        count: movements.length,
+        attrFromStockId: movements.filter((row) => getNumericValue(row?.id_product_attribute, null) !== null).length
+      });
+      movements.forEach((row) => {
+        console.info('stock_movements.row', row);
+      });
+      return movements;
   } catch (error) {
-    console.warn('Impossible de charger stock_deltas, fallback vide.', error?.message || error);
+      console.warn('Impossible de charger stock_movements, fallback vide.', {
+        productId,
+        productAttributeId,
+        error: error?.message || error
+      });
     return [];
   }
 };
@@ -778,8 +907,7 @@ export const productService = {
       // On utilise Math.abs au cas où la date est dans le futur (ex: pré-commandes)
       const diffMs = Math.abs(now - parsedDate);
       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      
-      console.log(`parsedDate: ${parsedDate}, Diff Jours: ${diffDays}`);
+    
       isNew = false
       
       if (diffDays <= 1) {
@@ -849,19 +977,16 @@ export const productService = {
       }
 
       // Construire le XML de mise à jour
-      const updateXML = `<?xml version="1.0" encoding="UTF-8"?>
-  <prestashop>
-    <stock_available>
-      <id>${stockId}</id>
-      <id_product>${productId}</id_product>
-      <id_product_attribute>${getFieldValue(stockToUpdate, 'id_product_attribute') || 0}</id_product_attribute>
-      <quantity>${newQuantity}</quantity>
-      <physical_quantity>${getFieldValue(stockToUpdate, 'physical_quantity') || newQuantity}</physical_quantity>
-      <reserved_quantity>${getFieldValue(stockToUpdate, 'reserved_quantity') || 0}</reserved_quantity>
-      <depends_on_stock>0</depends_on_stock>
-      <out_of_stock>${newQuantity === 0 ? 1 : 0}</out_of_stock>
-    </stock_available>
-  </prestashop>`;
+      const updateXML = buildStockAvailableUpdateXml(stockToUpdate, {
+        id: stockId,
+        id_product: productId,
+        id_product_attribute: getFieldValue(stockToUpdate, 'id_product_attribute') || 0,
+        quantity: newQuantity,
+        physical_quantity: getFieldValue(stockToUpdate, 'physical_quantity') || newQuantity,
+        reserved_quantity: getFieldValue(stockToUpdate, 'reserved_quantity') || 0,
+        depends_on_stock: 0,
+        out_of_stock: newQuantity === 0 ? 1 : 0
+      });
 
       const updateResponse = await api.put(`/stock_availables/${stockId}`, updateXML);
 
@@ -883,23 +1008,76 @@ export const productService = {
         throw new Error('Delta de stock invalide');
       }
 
-      const xmlPayload = buildPrestashopXml('stock_delta', {
+      if (normalizedDelta === 0) {
+        return null;
+      }
+
+      const movementSign = normalizedDelta >= 0 ? 1 : -1;
+      const movementQuantity = Math.abs(normalizedDelta);
+      const movementReasonId = normalizedDelta > 0 ? 1 : 2;
+
+      const stockResponse = await api.get(`/stock_availables?display=full&filter[id_product]=[${productId}]`);
+      const stockJson = xmlToJson(stockResponse.data);
+      let stockRows = stockJson?.prestashop?.stock_availables?.stock_available;
+      if (!Array.isArray(stockRows)) {
+        stockRows = stockRows ? [stockRows] : [];
+      }
+
+      const selectedAttrId = Number.parseInt(productAttributeId, 10) || 0;
+      const selectedStock = stockRows.find((row) => getNumericValue(row?.id_product_attribute, 0) === selectedAttrId)
+        || stockRows[0];
+
+      const stockId = getNumericValue(selectedStock?.id, null);
+      if (!stockId) {
+        throw new Error(`ID stock introuvable pour produit ${productId}`);
+      }
+
+      const rawProduct = await productService.getProductById(productId);
+      const priceTe = Number.parseFloat(rawProduct?.priceHT || rawProduct?.price || 0) || 0;
+
+      const xmlPayload = buildPrestashopXml('stock_movement', {
         id_product: productId,
         id_product_attribute: productAttributeId || 0,
-        delta: normalizedDelta
+        id_employee: 1,
+        id_stock: stockId,
+        id_stock_mvt_reason: movementReasonId,
+        physical_quantity: movementQuantity,
+        sign: movementSign,
+        price_te: priceTe,
+        date_add: new Date().toISOString().replace('T', ' ').slice(0, 19)
       });
 
-      const response = await api.post('/stock_deltas', xmlPayload, {
+      const response = await api.post('/stock_movements', xmlPayload, {
         headers: { 'Content-Type': 'application/xml' }
       });
 
+      const currentQuantity = getNumericValue(selectedStock?.quantity, 0);
+      const nextQuantity = currentQuantity + normalizedDelta;
+      const currentPhysical = getNumericValue(selectedStock?.physical_quantity, currentQuantity);
+      const nextPhysical = currentPhysical + normalizedDelta;
+
+      const updateXML = buildStockAvailableUpdateXml(selectedStock, {
+        id: stockId,
+        id_product: productId,
+        id_product_attribute: selectedAttrId,
+        quantity: nextQuantity,
+        physical_quantity: nextPhysical,
+        reserved_quantity: getNumericValue(selectedStock?.reserved_quantity, 0),
+        depends_on_stock: 0,
+        out_of_stock: nextQuantity <= 0 ? 1 : 0
+      });
+
+      await api.put(`/stock_availables/${stockId}`, updateXML);
+      upsertDailyStockEntry(productId, nextQuantity, currentQuantity);
+
       return response.data;
     } catch (error) {
-      throw new Error(`Erreur mise à jour stock via stock_deltas: ${error.message}`);
+      throw new Error(`Erreur mise à jour stock via stock_movements: ${error.message}`);
     }
   },
 
-  getStockDeltas: async (productId) => getStockDeltas(productId),
+  getStockMovements: async (productId) => getStockMovements(productId),
+  getStockDeltas: async (productId) => getStockMovements(productId),
 
   getStockEvolutionBetweenDates: async ({ productId, productAttributeId = 0, startDate, endDate }) => {
     if (!productId && productId !== 0) {
@@ -943,7 +1121,16 @@ export const productService = {
       // const currentQuantity = getNumericValue(rawProduct?.computed_stock, getNumericValue(rawProduct?.quantity, Number.parseFloat(selectedStock.quantity) || 0));
     const startKey = toDateNumber(normalizedStart) <= toDateNumber(normalizedEnd) ? normalizedStart : normalizedEnd;
     const endKey = toDateNumber(normalizedStart) <= toDateNumber(normalizedEnd) ? normalizedEnd : normalizedStart;
-    const deltaRows = normalizeDeltaRows(await getStockDeltas(productId))
+    console.info('stock_evolution.request', {
+      productId,
+      productAttributeId: selectedAttrId,
+      startDate: normalizedStart,
+      endDate: normalizedEnd,
+      startKey,
+      endKey,
+      currentQuantity
+    });
+    const deltaRows = normalizeMovementRows(await getStockMovements(productId, selectedAttrId))
       // Mode déclinaison (actif)
       .filter((row) => row.idProductAttribute === selectedAttrId)
       // Mode produit global (décommente si tu veux revenir au produit parent)
@@ -953,14 +1140,22 @@ export const productService = {
         && toDateNumber(row.dateAdd) <= toDateNumber(getTodayKey()));
       const movementMap = aggregateMovementsByDate(deltaRows, stockLabelByAttribute);
 
-    console.debug(`productService.getStockEvolutionBetweenDates: deltas=${deltaRows.length}, movementDates=${Object.keys(movementMap).length}`);
-
     const rows = resolveDailyEvolution({
       startDate: startKey,
       endDate: endKey,
       currentQuantity,
       movementMap,
       anchorDate: getTodayKey()
+    });
+
+    console.info('stock_evolution.result', {
+      movements: deltaRows.length,
+      movementDates: Object.keys(movementMap).length,
+      firstMovement: deltaRows[0] || null,
+      lastMovement: deltaRows[deltaRows.length - 1] || null
+    });
+    rows.forEach((row) => {
+      console.info('stock_evolution.row', row);
     });
 
     return {

@@ -5,7 +5,8 @@ import {
   MdDashboard,
   MdSettings, 
   MdKeyboardCommandKey,
-  MdInventory2
+  MdInventory2,
+  MdQueryStats
 } from 'react-icons/md';
 import './Sidebar.css';
 import logoUrl from '/logo.png'
@@ -36,6 +37,15 @@ export default function Sidebar({ isOpen }) {
                 <MdDashboard size={20} />
               </div>
               <span>Tableau de bord</span>
+            </NavLink>
+          </li>
+
+          <li className="nav-item">
+            <NavLink to="/mystore/admin/statistiques" className="nav-link text-dark d-flex align-items-center mb-1">
+              <div className="icon-box me-3 d-flex align-items-center justify-content-center">
+                <MdQueryStats size={20} />
+              </div>
+              <span>Statistiques</span>
             </NavLink>
           </li>
 

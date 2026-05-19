@@ -23,6 +23,83 @@ export const loginBO = (username, password) => {
   }
 };
 
+export const syncCartAfterAuth = async (sessionData) => {
+  try {
+    const { cartService, localCartService } = await import('./Cart');
+    const newCustomerId = sessionData.id;
+    const anonymousCustomerId = 0;
+
+    let anonymeCartId = localStorage.getItem(`current_cart_id_${anonymousCustomerId}`);
+    let currentAnonymeCart = localCartService.getCart(anonymousCustomerId);
+
+    if (anonymeCartId || (currentAnonymeCart && currentAnonymeCart.length > 0)) {
+      const itemsToApi = (currentAnonymeCart || []).map(item => ({
+        id_product: item.id,
+        id_product_attribute: item.idProductAttribute || item.id_product_attribute || 0,
+        quantity: item.quantity,
+        id_address_delivery: 0
+      }));
+
+      if (anonymeCartId) {
+        await cartService.updateCart(anonymeCartId, {
+          id_customer: newCustomerId,
+          id_currency: 1,
+          id_lang: 1,
+          associations: {
+            cart_rows: {
+              cart_row: itemsToApi
+            }
+          }
+        });
+        localStorage.setItem(`current_cart_id_${newCustomerId}`, anonymeCartId);
+        localStorage.removeItem(`current_cart_id_${anonymousCustomerId}`);
+      } else if (itemsToApi.length > 0) {
+        const createdCart = await cartService.createCart(newCustomerId, itemsToApi, 1, 1, 0);
+        if (createdCart?.id) {
+          const createdId = typeof createdCart.id === 'object' ? createdCart.id['#text'] : createdCart.id;
+          localStorage.setItem(`current_cart_id_${newCustomerId}`, createdId);
+        }
+      }
+
+      if (currentAnonymeCart && currentAnonymeCart.length > 0) {
+        localCartService.setCart(newCustomerId, currentAnonymeCart);
+        localCartService.clearCart(anonymousCustomerId);
+      }
+    } else {
+      const lastCart = await cartService.getLastCart(newCustomerId);
+      if (lastCart) {
+        const lastCartId = typeof lastCart.id === 'object' ? lastCart.id['#text'] : lastCart.id;
+        localStorage.setItem(`current_cart_id_${newCustomerId}`, lastCartId);
+
+        try {
+          const formattedCart = await cartService.formatCart(lastCart);
+          localCartService.setCart(newCustomerId, formattedCart?.products || []);
+        } catch (formatError) {
+          console.warn('Impossible de reconstruire le panier local depuis le dernier panier.', formatError);
+        }
+      } else {
+        const createdCart = await cartService.createCart(newCustomerId, [], 1, 1, 0);
+        if (createdCart?.id) {
+          const createdId = typeof createdCart.id === 'object' ? createdCart.id['#text'] : createdCart.id;
+          localStorage.setItem(`current_cart_id_${newCustomerId}`, createdId);
+        }
+        localCartService.setCart(newCustomerId, []);
+      }
+    }
+
+    const currentCartId = localStorage.getItem(`current_cart_id_${newCustomerId}`);
+    const currentCartItems = localCartService.getCart(newCustomerId);
+    console.log('Panier courant apres authentification:', {
+      customerId: newCustomerId,
+      currentCartId,
+      items: currentCartItems,
+      totalItems: localCartService.getTotalItems(newCustomerId)
+    });
+  } catch (e) {
+    console.error("Erreur durant la synchronisation du panier au login:", e);
+  }
+};
+
 export const loginFO = async (email, password) => {
   try {
     const response = await api.get(`/customers?filter[email]=${email}&display=full`);
@@ -45,51 +122,7 @@ export const loginFO = async (email, password) => {
 
     console.log('Session created:', sessionData);
     localStorage.setItem('client_session', JSON.stringify(sessionData));
-
-    // GESTION DU PANIER (Fusion au moment du login)
-    try {
-        const { cartService, localCartService } = await import('./Cart');
-        const newCustomerId = sessionData.id;
-        
-        let anonymeCartId = localStorage.getItem(`current_cart_id_1`);
-        let currentAnonymeCart = localCartService.getCart(1);
-        
-        if (anonymeCartId || (currentAnonymeCart && currentAnonymeCart.length > 0)) { 
-           // Mettre à jour l'API pour lier le panier au nouveau client
-           if (anonymeCartId) { // S'il avait fait un appel API récent
-               await cartService.updateCart(anonymeCartId, { id_customer: newCustomerId, id_currency: 1, id_lang: 1 });
-               localStorage.setItem(`current_cart_id_${newCustomerId}`, anonymeCartId);
-               localStorage.removeItem(`current_cart_id_1`);
-           }
-           
-           // Migration des produits dans le state local (on pourrait aussi récupérer l'ancien de l'utilisateur et fusionner, etc.)
-           if (currentAnonymeCart && currentAnonymeCart.length > 0) {
-               currentAnonymeCart.forEach(item => {
-                  localCartService.addToCart(newCustomerId, item, item.quantity);
-               });
-               localCartService.clearCart(1);
-           }
-        } else {
-           // Si pas de panier anonyme, on vérifie si le client a un vieux panier disponible
-           const lastCart = await cartService.getLastCart(newCustomerId);
-           if (lastCart) {
-              const lastCartId = typeof lastCart.id === 'object' ? lastCart.id['#text'] : lastCart.id;
-              localStorage.setItem(`current_cart_id_${newCustomerId}`, lastCartId);
-              
-              // On recrée la structure locale pour refléter l'API et afficher le compteur panier.
-              try {
-                const formattedCart = await cartService.formatCart(lastCart);
-                if (formattedCart?.products?.length) {
-                  localCartService.setCart(newCustomerId, formattedCart.products);
-                }
-              } catch (formatError) {
-                console.warn('Impossible de reconstruire le panier local depuis le dernier panier.', formatError);
-              }
-           }
-        }
-    } catch (e) {
-       console.error("Erreur durant la synchronisation du panier au login:", e);
-    }
+    await syncCartAfterAuth(sessionData);
 
     return sessionData;
 

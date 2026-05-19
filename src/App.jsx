@@ -20,6 +20,7 @@ import StockPage from './pages/backoffice/stock/StockPage'
 import ProductFiche from './pages/backoffice/product/ProductFiche'
 import CommandePageAdmin from './pages/backoffice/commande/Commande'
 import Dashboard from './pages/backoffice/dashboard/Dashboard'
+import StatsPage from './pages/backoffice/stats/StatsPage'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import Layout from './pages/backoffice/layout/Layout'
 
@@ -65,6 +66,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mystore/admin/statistiques"
+            element={
+              <ProtectedRoute>
+                <StatsPage />
               </ProtectedRoute>
             }
           />

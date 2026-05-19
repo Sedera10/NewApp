@@ -45,6 +45,12 @@ export const buildOrderXML = (orderData) => {
   const totalPaid = parseFloat(orderData.total_paid) || 0;
   const totalProducts = parseFloat(orderData.total_products) || 0;
   const totalProductsWT = parseFloat(orderData.total_products_wt) || totalPaid;
+  const totalPaidTaxIncl = parseFloat(orderData.total_paid_tax_incl ?? totalPaid) || totalPaid;
+  const totalPaidTaxExcl = parseFloat(orderData.total_paid_tax_excl ?? totalProducts) || totalProducts;
+  const totalPaidReal = parseFloat(orderData.total_paid_real ?? totalPaid) || totalPaid;
+  const totalShipping = parseFloat(orderData.total_shipping ?? 0) || 0;
+  const totalShippingTaxIncl = parseFloat(orderData.total_shipping_tax_incl ?? totalShipping) || totalShipping;
+  const totalShippingTaxExcl = parseFloat(orderData.total_shipping_tax_excl ?? totalShipping) || totalShipping;
   const secureKey = ensureMd5Like(orderData.secure_key);
 
   const currentStateNode = orderData.current_state !== undefined && orderData.current_state !== null && String(orderData.current_state).trim() !== ''
@@ -87,15 +93,15 @@ ${idNode}    <id_address_delivery><![CDATA[${idAddressDelivery}]]></id_address_d
     <total_discounts><![CDATA[${orderData.total_discounts ?? 0}]]></total_discounts>
     <total_discounts_tax_incl><![CDATA[${orderData.total_discounts_tax_incl ?? 0}]]></total_discounts_tax_incl>
     <total_discounts_tax_excl><![CDATA[${orderData.total_discounts_tax_excl ?? 0}]]></total_discounts_tax_excl>
-    <total_paid><![CDATA[${totalPaid.toFixed(2)}]]></total_paid>
-    <total_paid_tax_incl><![CDATA[${totalPaid.toFixed(2)}]]></total_paid_tax_incl>
-    <total_paid_tax_excl><![CDATA[${totalProducts.toFixed(2)}]]></total_paid_tax_excl>
-    <total_paid_real><![CDATA[${totalPaid.toFixed(2)}]]></total_paid_real>
-    <total_products><![CDATA[${totalProducts.toFixed(2)}]]></total_products>
-    <total_products_wt><![CDATA[${totalProductsWT.toFixed(2)}]]></total_products_wt>
-    <total_shipping><![CDATA[${orderData.total_shipping ?? 0}]]></total_shipping>
-    <total_shipping_tax_incl><![CDATA[${orderData.total_shipping_tax_incl ?? 0}]]></total_shipping_tax_incl>
-    <total_shipping_tax_excl><![CDATA[${orderData.total_shipping_tax_excl ?? 0}]]></total_shipping_tax_excl>
+    <total_paid><![CDATA[${totalPaid.toFixed(6)}]]></total_paid>
+    <total_paid_tax_incl><![CDATA[${totalPaidTaxIncl.toFixed(6)}]]></total_paid_tax_incl>
+    <total_paid_tax_excl><![CDATA[${totalPaidTaxExcl.toFixed(6)}]]></total_paid_tax_excl>
+    <total_paid_real><![CDATA[${totalPaidReal.toFixed(6)}]]></total_paid_real>
+    <total_products><![CDATA[${totalProducts.toFixed(6)}]]></total_products>
+    <total_products_wt><![CDATA[${totalProductsWT.toFixed(6)}]]></total_products_wt>
+    <total_shipping><![CDATA[${totalShipping.toFixed(6)}]]></total_shipping>
+    <total_shipping_tax_incl><![CDATA[${totalShippingTaxIncl.toFixed(6)}]]></total_shipping_tax_incl>
+    <total_shipping_tax_excl><![CDATA[${totalShippingTaxExcl.toFixed(6)}]]></total_shipping_tax_excl>
     <carrier_tax_rate><![CDATA[${orderData.carrier_tax_rate ?? 0}]]></carrier_tax_rate>
     <total_wrapping><![CDATA[${orderData.total_wrapping ?? 0}]]></total_wrapping>
     <total_wrapping_tax_incl><![CDATA[${orderData.total_wrapping_tax_incl ?? 0}]]></total_wrapping_tax_incl>

@@ -26,6 +26,24 @@ const getStatusColor = (stateId) => {
   }
 };
 
+const extractStatusName = (status) => {
+  if (!status) return '';
+  const rawName = status.name && status.name.language
+    ? (Array.isArray(status.name.language) ? getTextVal(status.name.language[0]) : getTextVal(status.name.language))
+    : getTextVal(status.name);
+  return String(rawName || '').trim();
+};
+
+const getStatusIdByKeywords = (statuses, keywords) => {
+  for (const status of statuses) {
+    const name = extractStatusName(status).toLowerCase();
+    if (keywords.some((keyword) => name.includes(keyword))) {
+      return String(getTextVal(status.id));
+    }
+  }
+  return null;
+};
+
 export default function Commande() {
 
     const [commandes, setCommandes] = useState([]);
@@ -119,6 +137,13 @@ export default function Commande() {
 
                     {!loading && commandes.map((order) => {
                       const badgeColor = getStatusColor(order.current_state);
+                      const currentStateId = String(getTextVal(order.current_state));
+                      const matchedStatus = statuses.find((status) => String(getTextVal(status.id)) === currentStateId);
+                      const statusLabel = order.stateName || extractStatusName(matchedStatus) || `Statut ${currentStateId}`;
+                      const cancelStatusId = getStatusIdByKeywords(statuses, ['annul', 'cancel']);
+                      const deliverStatusId = getStatusIdByKeywords(statuses, ['livr', 'deliver']);
+                      const canCancel = cancelStatusId && cancelStatusId !== currentStateId;
+                      const canDeliver = deliverStatusId && deliverStatusId !== currentStateId;
                       
                       return (
                         <tr key={order.id}>
@@ -147,21 +172,7 @@ export default function Commande() {
                             <p className="text-sm mb-0">{order.payment}</p>
                           </td>
                           <td>
-                            <select 
-                                className={`badge ${badgeColor}`}
-                                value={String(getTextVal(order.current_state))}
-                                onChange={(e) => handleChangeStatus(order.id, e.target.value)}
-                             >
-                               {statuses.map(s => {
-                                   const sid = getTextVal(s.id);
-                                   // PrestaShop uses language arrays or objects. Let's just do a naive extract if it's there, 
-                                   // or reuse CurrentStateName logic if needed. Here we try to get a string safely:
-                                   const sname = s.name && s.name.language ? 
-                                       (Array.isArray(s.name.language) ? getTextVal(s.name.language[0]) : getTextVal(s.name.language)) 
-                                       : (getTextVal(s.name) || `Statut ${sid}`);
-                                   return <option key={sid} value={sid}>{sname}</option>;
-                               })}
-                             </select>
+                            <span className={`badge ${badgeColor}`}>{statusLabel}</span>
                           </td>
                           <td>
                             <p className="text-sm mb-0 text-secondary">
@@ -169,7 +180,22 @@ export default function Commande() {
                             </p>
                           </td>
                           <td className="text-end pe-4 d-flex align-items-center justify-content-end gap-2">
-                             <a href="#">Details</a>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              disabled={!canCancel}
+                              onClick={() => handleChangeStatus(order.id, cancelStatusId)}
+                            >
+                              Annuler
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-success"
+                              disabled={!canDeliver}
+                              onClick={() => handleChangeStatus(order.id, deliverStatusId)}
+                            >
+                              Livrer
+                            </button>
                           </td>
                         </tr>
                       );

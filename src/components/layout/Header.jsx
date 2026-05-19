@@ -24,7 +24,16 @@ const Header = ({ toggleSidebar, isSidebarOpen }) => {
 
   const updateCartCount = (customerId = 0) => {
     const count = localCartService.getTotalItems(customerId);
-    setCartCount(count);
+    let displayCount = count;
+
+    if (count === 0) {
+      const currentCartId = localStorage.getItem(`current_cart_id_${customerId}`);
+      if (currentCartId) {
+        displayCount = 1;
+      }
+    }
+
+    setCartCount(displayCount);
   };
 
   useEffect(() => {

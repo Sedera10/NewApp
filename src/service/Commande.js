@@ -29,7 +29,9 @@ export const commandeService = {
       try {
         if (idCustomer && idCustomer !== '0') {
           const customer = await customerService.getCustomerById(idCustomer);
-          customerName = `${customer.firstname} ${customer.lastname}`;
+          if (customer) {
+            customerName = `${customer.firstname} ${customer.lastname}`;
+          }
         }
       } catch (err) { }
 
@@ -38,22 +40,26 @@ export const commandeService = {
       try {
         if (idAddressDelivery && idAddressDelivery !== '0') {
           const address = await getAddresseById(idAddressDelivery);
-          addressInfo = {
-            fullName: `${address.firstname} ${address.lastname}`,
-            address: `${address.address1}, ${address.postcode} ${address.city}`,
-            country: address.country,
-            phone: address.phone
-          };
+          if (address) {
+            addressInfo = {
+              fullName: `${address.firstname} ${address.lastname}`,
+              address: `${address.address1}, ${address.postcode} ${address.city}`,
+              country: address.country,
+              phone: address.phone
+            };
+          }
         }
       } catch (err) { }
 
       // Fetch order state name
       let stateName = 'Inconnu';
       try {
-        if (idState) {
-          const stateResponse = await api.get(`/order_states/${idState}`);
+        if (idState && idState !== '0') {
+          const stateResponse = await api.get(`/order_states?display=full&filter[id]=[${idState}]`);
           const stateJson = xmlToJson(stateResponse.data);
-          stateName = getTextVal(stateJson?.prestashop?.order_state?.name);
+          const states = stateJson?.prestashop?.order_states?.order_state || [];
+          const state = Array.isArray(states) ? states[0] : states;
+          stateName = getTextVal(state?.name);
         }
       } catch (err) { }
 
@@ -214,7 +220,13 @@ export const commandeService = {
   CustomName: async (idCustomer) => {
       try {
           const id = getTextVal(idCustomer);
+          if (!id || String(id) === '0') {
+            return `Client #${idCustomer}`;
+          }
           const customer = await customerService.getCustomerById(id);
+          if (!customer) {
+            return `Client #${idCustomer}`;
+          }
           return `${customer.firstname} ${customer.lastname}`;
       } catch (error) {
           return `Client #${idCustomer}`;
@@ -233,9 +245,13 @@ export const commandeService = {
 
   CurrentStateName: async (idState) => {
       let id = getTextVal(idState);
+      if (!id || String(id) === '0') {
+        return `Status #${id}`;
+      }
       try {
-          const response = await api.get(`/order_states/${id}?display=full`);
-          const state = xmlToJson(response.data).prestashop.order_state;
+        const response = await api.get(`/order_states?display=full&filter[id]=[${id}]`);
+        const stateList = xmlToJson(response.data).prestashop.order_states?.order_state || [];
+        const state = Array.isArray(stateList) ? stateList[0] : stateList;
 
           let nameFinal = "Status inconnu";
 
@@ -353,16 +369,15 @@ export const commandeService = {
 
   updateOrderStatus: async (idOrder, idOrderState) => {
       try {
-          // PrestaShop needs an order history entry to change the current status
           const payload = {
               id_order: idOrder,
-              id_order_state: idOrderState
+          id_order_state: idOrderState,
+          date_add: new Date().toISOString().replace('T', ' ').slice(0, 19)
           };
 
-          const xmlPayload = buildPrestashopXml('order_history', payload);
+        const xmlPayload = buildPrestashopXml('order_state_update', payload);
 
-          // Send to PrestaShop API
-          await api.post('/order_histories', xmlPayload, {
+        await api.post('/order_state_update', xmlPayload, {
               headers: {
                   'Content-Type': 'application/xml'
               }

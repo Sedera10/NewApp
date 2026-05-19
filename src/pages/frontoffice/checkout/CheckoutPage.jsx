@@ -14,7 +14,7 @@ const CheckoutPage = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [cart, setCart] = useState([]);
   const [customer, setCustomer] = useState(null);
-  const [customerData, setCustomerData] = useState(null);
+  const [cus0tomerData, setCustomerData] = useState(null);
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [orderError, setOrderError] = useState('');
@@ -51,8 +51,8 @@ const CheckoutPage = () => {
         const currentUser = JSON.parse(localStorage.getItem('client_session'));
         console.log('Current user from session:', currentUser);
 
-        if (!currentUser?.isLoggedIn || currentUser.id == 1) {
-          navigate('/mystore/fr/login', { state: { redirect: '/mystore/fr/checkout' } });
+        if (!currentUser?.isLoggedIn || currentUser.id === 0 || currentUser.type === 2) {
+          navigate('/mystore/fr', { state: { redirect: '/mystore/fr/checkout' } });
           return;
         }
 

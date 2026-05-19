@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import api from './api';
-import { xmlToJson, buildPrestashopXml } from './Util';
+import { xmlToJson } from './Util';
 import { resetAllData } from './resetService';
 import { buildCategoryXML, buildTaxXML, buildTaxRulesGroupXML, buildTaxRuleXML, buildProductXML } from './xml/importXmlBuilder';
 
@@ -1380,27 +1380,6 @@ const getExistingOrderStateId = (stateName, orderStates) => {
   return fallbackMatch?.id ? (Number.parseInt(fallbackMatch.id, 10) || null) : null;
 };
 
-const createOrderStateUpdate = async ({ id_order, id_order_state, date_add }) => {
-  if (!id_order || !id_order_state) return null;
-  console.info('order_state_update.create', {
-    id_order,
-    id_order_state,
-    date_add
-  });
-  const xml = buildOrderHistoryXML({
-    id_order,
-    id_order_state,
-    date_add: date_add || new Date().toISOString().replace('T', ' ').slice(0, 19)
-  });
-  const response = await prestashopApi.createResource('order_histories', xml);
-  console.info('order_state_update.response', {
-    id_order,
-    id_order_state,
-    hasResponse: Boolean(response)
-  });
-  return response;
-};
-
 
 /**
  * Parse le champ "achat" au format [(ref;qty;variante)]
@@ -1762,20 +1741,15 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
             }
 
             const normalizedStatus = normalizeStatusLabel(etat);
-            const paidStateId = getExistingOrderStateId('paiement', orderStates) || getExistingOrderStateId('payment', orderStates) || 11;
-            const deliveredStateId = getExistingOrderStateId('livre', orderStates) || getExistingOrderStateId('livré', orderStates) || 5;
-            const cancelledStateId = getExistingOrderStateId('annule', orderStates) || getExistingOrderStateId('annulé', orderStates) || 6;
-            let targetStateId = null;
-
-            if (normalizedStatus.startsWith('annul')) {
-              targetStateId = cancelledStateId;
-            } else if (normalizedStatus.startsWith('livr')) {
-              targetStateId = deliveredStateId;
-            }
 
             // CONDITION: Si etat === "dans le panier" OU vide, créer SEULEMENT le cart (pas la commande)
             if (normalizedStatus && normalizedStatus !== 'dans le panier') {
               // ÉTAPE 4: Créer la commande
+              const shouldCreateCancellationHistory = normalizedStatus.startsWith('annul');
+              const cancelledStateId = shouldCreateCancellationHistory
+                ? getExistingOrderStateId('annulé', orderStates)
+                : null;
+
               const orderXML = buildOrderXML({
                 id_customer: customerId,
                 id_address: addressId,
@@ -1787,6 +1761,7 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
                 module: CONSTANTS.PAYMENT_MODULE,
                 payment: CONSTANTS.PAYMENT_LABEL,
                 secure_key: secureKey,
+                current_state: 11,
                 date_add: `${dateCmd} 00:00:00`,
                 date_upd: `${dateCmd} 00:00:00`,
                 total_paid: roundDecimal(totalPaid),
@@ -1818,32 +1793,73 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
 
               console.log(`✓ Commande créée: ${email} (Order ID: ${orderId})`);
 
-              if (targetStateId) {
+              // Enregistrer les mouvements via stock_deltas sans dupliquer la décrémentation finale:
+              // 1) snapshot quantité actuelle (déjà ajustée par PrestaShop),
+              // 2) appliquer stock_deltas,
+              // 3) restaurer la quantité snapshot.
+
+              /*
+              MODE SANS ENREGISTREMENT DE MOUVEMENTS (sans stock_deltas)
+
+              Pour désactiver complètement l'enregistrement des mouvements pendant la création de commande :
+
+              1) SUPPRIMER le bloc suivant dans importFile3 (après "Commande créée"):
+                - depuis:
+                  // Enregistrer les mouvements via stock_deltas sans dupliquer la décrémentation finale:
+                  for (const rowData of orderRows) {
+                    ...
+                  }
+                - jusqu'à la fin du for/catch qui log:
+                  "✓ Mouvement stock enregistré puis stock restauré..."
+
+              2) NE RIEN AJOUTER d'autre.
+                - PrestaShop continuera à ajuster le stock automatiquement via le couple cart + order.
+                - L'import garde son fonctionnement actuel sans duplication.
+
+              3) Optionnel (nettoyage):
+                - si non utilisés ailleurs, supprimer les helpers:
+                  - findMatchingStockRow
+                  - getCurrentStockQuantity
+                - garder applyStockDeltaMovement seulement si utile pour d'autres cas.
+              */
+              for (const rowData of orderRows) {
                 try {
-                  await createOrderStateUpdate({
-                    id_order: orderId,
-                    id_order_state: targetStateId,
-                    date_add: `${dateCmd} 00:00:00`
-                  });
-                  const [updatedOrder] = await prestashopApi.getResources('orders', orderId, null, { display: 'full' });
-                  const updatedState = getPrimitiveValue(updatedOrder?.current_state);
-                  console.info('order_state_update.result', {
-                    orderId,
-                    targetStateId,
-                    current_state: updatedState
-                  });
-                  if (String(updatedState) === '0') {
-                    console.warn('order_state_update.still_zero', {
-                      orderId,
-                      targetStateId
-                    });
+                  const quantityOrdered = Number.parseInt(rowData.productQuantity, 10) || 0;
+                  if (quantityOrdered <= 0) {
+                    continue;
                   }
-                  if (targetStateId === deliveredStateId) {
-                    console.log(`INFO stock movement auto module: commande ${orderId} livre`);
+
+                  const snapshot = await getCurrentStockQuantity({
+                    productId: rowData.productId,
+                    productAttributeId: rowData.productAttributeId || 0
+                  });
+
+                  if (!snapshot) {
+                    console.warn(`⚠️ Snapshot stock introuvable avant stock_deltas: prod=${rowData.productId}, attr=${rowData.productAttributeId || 0}`);
+                    continue;
                   }
-                } catch (stateError) {
-                  console.warn(`⚠️ Impossible de mettre a jour l'etat pour la commande ${orderId}:`, stateError.message);
-                  results.errors.push(`Commande ${orderId}: etat non mis a jour (${stateError.message})`);
+
+                  const movementDelta = -Math.abs(quantityOrdered);
+                  const deltaApplied = await applyStockDeltaMovement({
+                    productId: rowData.productId,
+                    productAttributeId: rowData.productAttributeId || 0,
+                    delta: movementDelta
+                  });
+
+                  if (!deltaApplied) {
+                    continue;
+                  }
+
+                  await upsertStockAvailableQuantity({
+                    productId: rowData.productId,
+                    productAttributeId: rowData.productAttributeId || 0,
+                    quantity: snapshot.quantity
+                  });
+
+                  console.log(`✓ Mouvement stock enregistré puis stock restauré: prod=${rowData.productId}, attr=${rowData.productAttributeId || 0}, delta=${movementDelta}, restored=${snapshot.quantity}`);
+                } catch (movementError) {
+                  console.warn(`⚠️ Mouvement stock non bloquant en échec pour commande ${orderId}:`, movementError.message);
+                  results.errors.push(`Commande ${orderId}: mouvement stock non appliqué (${movementError.message})`);
                 }
               }
 
@@ -1865,6 +1881,7 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
                   id_shop: getPrimitiveValue(freshOrder?.id_shop) || CONSTANTS.ID_SHOP_DEFAULT,
                   id_lang: getPrimitiveValue(freshOrder?.id_lang) || CONSTANTS.ID_LANG,
                   secure_key: getPrimitiveValue(freshOrder?.secure_key) || secureKey,
+                  current_state: getPrimitiveValue(freshOrder?.current_state) || 11,
                   module: CONSTANTS.PAYMENT_MODULE,
                   payment: getPrimitiveValue(freshOrder?.payment) || CONSTANTS.PAYMENT_LABEL,
                   date_add: `${dateCmd} 00:00:00`,
@@ -1928,7 +1945,24 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress) 
                 }
               }
 
-              // Etat commande gere via order_state_update (pas d'order_history ici).
+              if (shouldCreateCancellationHistory) {
+                try {
+                  if (!cancelledStateId) {
+                    throw new Error('État annulé introuvable dans PrestaShop');
+                  }
+
+                  const orderHistoryXML = buildOrderHistoryXML({
+                    id_order: orderId,
+                    id_order_state: cancelledStateId,
+                    date_add: `${dateCmd} 00:00:00`
+                  });
+
+                  await prestashopApi.createResource('order_histories', orderHistoryXML);
+                } catch (historyError) {
+                  console.warn(`⚠️ Impossible d'ajouter l'historique d'annulation pour la commande ${orderId}:`, historyError.message);
+                  results.errors.push(`Commande '${email}': ${historyError.message}`);
+                }
+              }
             } else {
               // Si etat === "dans le panier", créer SEULEMENT le cart
               if (totalPaid <= 0) {

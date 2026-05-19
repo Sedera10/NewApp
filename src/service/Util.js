@@ -16,7 +16,7 @@ export function isAnonymeUser() {
   const user = JSON.parse(
     localStorage.getItem('client_session')
   );
-  return user?.id === null && user?.type === 2;
+  return String(user?.id) === '0' && user?.type === 2;
 }
 
 export const jsonToXml = (jsonObj) => {

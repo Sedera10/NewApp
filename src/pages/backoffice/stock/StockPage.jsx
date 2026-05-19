@@ -137,7 +137,7 @@ export default function StockPage() {
         <div>
           <h1 className="stock-title">Gestion des stocks par déclinaison</h1>
           <p className="stock-subtitle">
-            La modification passe par les deltas PrestaShop, pas par un stock global.
+            La modification passe par les mouvements de stock PrestaShop, pas par un stock global.
           </p>
         </div>
 
