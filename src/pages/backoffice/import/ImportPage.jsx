@@ -12,6 +12,11 @@ export default function ImportPage() {
     const [progressMsg, setProgressMsg] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
+    const [oui, setOui] = useState(false);
+
+    const handleImport = () => {
+        setOui(!oui)
+    }
 
     useEffect(() => {
         if (!successMessage) return;
@@ -55,7 +60,9 @@ export default function ImportPage() {
         setErrorMessage('');
         setSuccessMessage('');
 
-        if (!file1 && !file2 && !file3 && imageFiles.length === 0) {
+
+
+        if (!file1 && !file2 && !file3 && (oui || imageFiles.length === 0)) {
             setErrorMessage("Veuillez sélectionner au moins un fichier à importer.");
             return;
         }
@@ -106,7 +113,7 @@ export default function ImportPage() {
             }
 
             // Images : Fichier 4 (Nécessite les résultats du fichier 1)
-            if (imageFiles.length > 0 && file1Results) {
+            if ( !oui && (imageFiles.length > 0) && file1Results) {
                 try {
                     setProgressMsg('(4/4) Extraction du ZIP des images...');
                     
@@ -250,6 +257,11 @@ export default function ImportPage() {
                                 {/* Séparateur */}
                                 <hr className="my-5 opacity-25" />
 
+                                <div>
+                                    <label className='form-check-label mb-3' htmlFor="importImage"> Tsy importena ny image </label> 
+                                    <input className='form-check-input' checked={oui} onChange={handleImport} type="checkbox" name="importImage" id="importImage" />                                  
+                                </div>
+
                                 {/* Section Images */}
                                 <h5 className="mb-3 text-secondary d-flex align-items-center justify-content-center">
                                     <MdImage className="me-2" size={24} /> Images des produits (.zip)
@@ -264,6 +276,7 @@ export default function ImportPage() {
                                         className="form-control" 
                                         accept=".zip" 
                                         onChange={handleImageChange}
+                                        disabled={oui}
                                     />
                                     {imageFiles.length > 0 && (
                                         <div className="mt-2 fw-bold small text-primary">

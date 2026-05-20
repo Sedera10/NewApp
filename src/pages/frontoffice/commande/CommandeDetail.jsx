@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { commandeService } from '../../../service/Commande';
 import Header from '../../../components/layout/Header';
 import './CommandeDetail.css';
+import { localCartService } from '../../../service/cartService';
 
 export default function CommandeDetail() {
   const getTextVal = (val) => {
@@ -42,10 +43,28 @@ export default function CommandeDetail() {
       } finally {
         setLoading(false);
       }
-    };
+    };  
 
     fetchOrderDetails();
   }, [orderId]);
+
+  const handleDuplicate = () => {
+    if(!order) return
+
+    const items = order.orderRows.map((row) => ({
+      id: row.productId,
+      name: getTextVal(row.productName),
+      quantity: row.quantity * 2,
+      price: row.productPrice,
+      image: row.productImage,
+      idProductAttribute : 0
+    })) 
+
+    const customerId = order.customerId || 0 
+    localCartService.setCart(customerId, items)
+    navigate('/mystore/fr/cart')
+    
+  }
 
   if (loading) return (
     <>
@@ -183,6 +202,11 @@ export default function CommandeDetail() {
                       <td className="quantite">{row.quantity}</td>
                       <td className="price">{parseFloat(getTextVal(row.productPrice)).toFixed(2)} €</td>
                       <td className="total">{(row.quantity * parseFloat(getTextVal(row.productPrice))).toFixed(2)} €</td>
+                      <td>
+                        <div className="actions-section">
+                          <button className="btn btn-primary" onClick={handleDuplicate (row.productId)}>Dupliquer</button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -191,9 +215,7 @@ export default function CommandeDetail() {
           </div>
 
           {/* Actions */}
-          <div className="actions-section">
-            <button className="btn btn-primary">📄 Télécharger Facture</button>
-          </div>
+          
         </div>
       </div>
     </>
