@@ -131,6 +131,7 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress =
         }
 
         const dateCmd = convertDateFormat(rawDate);
+        console.log('Date import CSV', { email, rawDate, dateCmd });
 
         if (!email || !nom || !pwd) {
           results.errors.push(`Ligne ${i + 1}: Donnees client incompletes (email, nom ou pwd manquant)`);
@@ -353,14 +354,17 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress =
               });
 
               let orderId = null;
+              let createdOrderDate = null;
 
               try {
                 const orderResponse = await prestashopApi.createResource('orders', orderXML);
                 orderId = getPrimitiveValue(orderResponse?.order?.id);
+                createdOrderDate = getPrimitiveValue(orderResponse?.order?.date_add);
               } catch (creationError) {
                 const fallbackOrder = await findOrderByCartId({ cartId, customerId });
                 if (fallbackOrder?.id) {
                   orderId = getPrimitiveValue(fallbackOrder.id);
+                  createdOrderDate = getPrimitiveValue(fallbackOrder.date_add);
                 } else {
                   throw creationError;
                 }
@@ -370,7 +374,12 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress =
                 throw createValidationError('Pas d\'ID retourne pour la commande');
               }
 
-              console.log(`Commande creee: order=${orderId}, cart=${cartId}`);
+              console.log('Commande creee', {
+                orderId,
+                cartId,
+                createdOrderDate,
+                expectedDate: `${dateCmd} 00:00:00`
+              });
 
               if (targetStateId && shouldApplyStateChange) {
                 try {
@@ -396,6 +405,7 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress =
             //       throw new Error(`Commande ${orderId} introuvable apres creation`);
             //     }
 
+            //     const existingState = getPrimitiveValue(freshOrder?.current_state);
             //     const orderUpdateXML = buildOrderXML({
             //       id_order: orderId,
             //       id_customer: getPrimitiveValue(freshOrder?.id_customer) || customerId,
@@ -408,7 +418,7 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress =
             //       secure_key: getPrimitiveValue(freshOrder?.secure_key) || secureKey,
             //       module: CONSTANTS.PAYMENT_MODULE,
             //       payment: getPrimitiveValue(freshOrder?.payment) || CONSTANTS.PAYMENT_LABEL,
-            //       current_state: targetStateId || paidStateId,
+            //       current_state: existingState,
             //       date_add: `${dateCmd} 00:00:00`,
             //       date_upd: `${dateCmd} 00:00:00`,
             //       total_paid: roundDecimal(totalPaid),
@@ -416,7 +426,22 @@ export const importFile3 = async (file, file1Results, file2Results, onProgress =
             //       total_products_wt: roundDecimal(totalProductsWT)
             //     });
 
+            //     console.log('Commande update dates', {
+            //       orderId,
+            //       currentState: existingState,
+            //       dateAdd: `${dateCmd} 00:00:00`,
+            //       dateUpd: `${dateCmd} 00:00:00`
+            //     });
+
             //     await prestashopApi.updateResource('orders', orderId, orderUpdateXML);
+
+            //     const [updatedOrder] = await prestashopApi.getResources('orders', orderId, null, { display: 'full' });
+            //     console.log('Commande dates appliquees', {
+            //       orderId,
+            //       currentState: getPrimitiveValue(updatedOrder?.current_state),
+            //       dateAdd: getPrimitiveValue(updatedOrder?.date_add),
+            //       dateUpd: getPrimitiveValue(updatedOrder?.date_upd)
+            //     });
             //   } catch (updateError) {
             //     results.errors.push(`Commande ${orderId}: Impossible de mettre a jour les dates (${updateError.message})`);
             //   }

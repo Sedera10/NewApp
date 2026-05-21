@@ -13,10 +13,17 @@ const getTextVal = (value) => {
 };
 
 const toDateKey = (value) => {
-  if (!value) return null;
   const rawValue = String(getTextVal(value) || '').trim();
   if (!rawValue) return null;
   return rawValue.slice(0, 10);
+};
+
+const toDateObject = (value) => {
+  const dateKey = toDateKey(value);
+  if (!dateKey) return null;
+  const dateObject = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(dateObject.getTime())) return null;
+  return dateObject;
 };
 
 const parseAmount = (value) => Number.parseFloat(getTextVal(value) || 0) || 0;
@@ -96,8 +103,6 @@ export default function Dashboard() {
   useEffect(() => {
     const { start, end } = dateFilter;
 
-    console.log(`Debut : ${start} et Fin : ${end} `)
-
     if (!start || !end) {
       setPeriodStats(null);
       return;
@@ -108,8 +113,8 @@ export default function Dashboard() {
     endDate.setHours(23, 59, 59, 999);
 
     const filteredOrders = globalStats.allOrders.filter((order) => {
-      const orderDate = new Date(order.date_add);
-      return orderDate >= startDate && orderDate <= endDate;
+      const orderDate = toDateObject(order.date_add);
+      return orderDate && orderDate >= startDate && orderDate <= endDate;
     });
 
     const orderCartIds = new Set(
@@ -119,10 +124,22 @@ export default function Dashboard() {
     );
 
     const filteredCarts = globalStats.allCarts.filter((cart) => {
-      if (!cart.dateAdd) return false;
-      const cartDate = new Date(cart.dateAdd);
+      const cartDate = toDateObject(cart.dateAdd);
+      if (!cartDate) return false;
       const cartId = String(getTextVal(cart.id) || '').trim();
       return cartDate >= startDate && cartDate <= endDate && cartId && !orderCartIds.has(cartId);
+    });
+
+    console.log('[dashboard] filter range', { start, end });
+    console.log('[dashboard] orders', {
+      total: globalStats.allOrders.length,
+      filtered: filteredOrders.length,
+      sampleDate: getTextVal(globalStats.allOrders[0]?.date_add)
+    });
+    console.log('[dashboard] carts', {
+      total: globalStats.allCarts.length,
+      filtered: filteredCarts.length,
+      sampleDate: getTextVal(globalStats.allCarts[0]?.dateAdd)
     });
 
     setPeriodStats({
