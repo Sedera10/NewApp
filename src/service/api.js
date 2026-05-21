@@ -12,9 +12,3 @@ const api = axios.create({
 });
 
 export default api;
-
-export const getProducts = async () => {
-  const response = await api.get('/products?display=full');
-  const jsonObj = xmlToJson(response.data);
-  return jsonObj.prestashop.products.product;
-};

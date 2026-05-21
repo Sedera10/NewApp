@@ -1,8 +1,11 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { MdCloudUpload, MdFileUpload, MdFolderZip, MdImage } from 'react-icons/md';
-import { importFile1, importFile2, importFile4, rollbackAllImports } from '../../../service/csvImportService';
+import { MdCloudUpload } from 'react-icons/md';
+import { importFile4, rollbackAllImports } from '../../../service/csvImportService';
+import { importFile1 } from '../../../service/csvImport/file1/index';
+import { importFile2 } from '../../../service/csvImport/file2/index';
 import { importFile3 } from '../../../service/csvImport/file3';
-import { extractZipFiles } from '../../../service/Util';
+import { extractZipFiles } from '../../../service/csvImport/image/helper';
+import { LoadingProgress } from '../../../components/UI/others/LoadingProgress';
 
 export default function ImportPage() {
     const [file1, setFile1] = useState(null);
@@ -11,12 +14,44 @@ export default function ImportPage() {
     const [imageFiles, setImageFiles] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [progressMsg, setProgressMsg] = useState('');
+    const [progress1, setProgress1] = useState({
+        step: "",
+        message: "",
+        description: "",
+        percentage: 0
+    });
+    const [progress2, setProgress2] = useState({
+        step: "",
+        message: "",
+        description: "",
+        percentage: 0
+    });
+    const [progress3, setProgress3] = useState({
+        step: "",
+        message: "",
+        description: "",
+        percentage: 0
+    });
+    const [progress4, setProgress4] = useState({
+        step: "",
+        message: "",
+        description: "",
+        percentage: 0
+    });
+    const [result1, setResult1] = useState(null);
+    const [result2, setResult2] = useState(null);
+    const [result3, setResult3] = useState(null);
+    const [result4, setResult4] = useState(null);
     const [errorMessage, setErrorMessage] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
-    const [oui, setOui] = useState(false);
 
-    const handleImport = () => {
-        setOui(!oui)
+    const [activeStep, setActiveStep] = useState(null);
+
+    const [noImage, setNoImage] = useState(false);
+    const [step, setStep] = useState(4)
+
+    const handleNoImage = () => {
+        setNoImage(!noImage)
     }
 
     useEffect(() => {
@@ -48,7 +83,6 @@ export default function ImportPage() {
     const handleImageChange = (e) => {
         const files = e.target.files;
         if (files && files.length > 0) {
-            // Pour un ZIP, on stocke le fichier ZIP directement
             setImageFiles([files[0]]);
         } else {
             setImageFiles([]);
@@ -61,25 +95,32 @@ export default function ImportPage() {
         setErrorMessage('');
         setSuccessMessage('');
 
-
-        if (!file1 && !file2 && !file3 && (oui || imageFiles.length === 0)) {
+        if (!file1 && !file2 && !file3 && imageFiles.length === 0) {
             setErrorMessage("Veuillez sélectionner au moins un fichier à importer.");
             return;
         }
 
+        const totalSteps = noImage ? 3 : 4;
+        setStep(totalSteps);
+
         setIsLoading(true);
         setProgressMsg('Démarrage de l\'import...');
+        
+        try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth'}); } catch (e) {/* ignore */}
 
         try {
             let file1Results = null;
             let file2Results = null;
             let file3Results = null;
-            let hasError = false;
-
+            let file4Results = null;
             // Fichier 1 : Produits et Catégories
             if (file1) {
                 try {
-                    file1Results = await importFile1(file1, (progress) => setProgressMsg(`(1/4) ${progress.message}`));
+                    setActiveStep(1);
+                    file1Results = await importFile1(file1, (progress) => {
+                        setProgress1(progress);
+                        setProgressMsg(`(1/${totalSteps}) ${progress.message}`);
+                    });
                 } catch (error) {
                     console.error("Erreur File1:", error);
                     setProgressMsg('Erreur lors de l\'import du Fichier 1, rollback en cours...');
@@ -88,10 +129,15 @@ export default function ImportPage() {
                 }
             }
 
-            // Fichier 2 : Variantes et Stock (Nécessite Fichier 1)
+            setResult1(file1Results)
+
             if (file2 && file1Results) {
                 try {
-                    file2Results = await importFile2(file2, file1Results, (progress) => setProgressMsg(`(2/4) ${progress.message}`));
+                    setActiveStep(2);
+                    file2Results = await importFile2(file2, file1Results, (progress) => {
+                        setProgress2(progress);
+                        setProgressMsg(`(2/${totalSteps}) ${progress.message}`);
+                    });
                 } catch (error) {
                     console.error("Erreur File2:", error);
                     setProgressMsg('Erreur lors de l\'import du Fichier 2, rollback en cours...');
@@ -100,10 +146,15 @@ export default function ImportPage() {
                 }
             }
 
-            // Fichier 3 : Commandes et Clients (Nécessite Fichier 1 et 2)
+            setResult2(file2Results)
+
             if (file3 && file1Results && file2Results) {
                 try {
-                    file3Results = await importFile3(file3, file1Results, file2Results, (progress) => setProgressMsg(`(3/4) ${progress.message}`));
+                    setActiveStep(3);
+                    file3Results = await importFile3(file3, file1Results, file2Results, (progress) => {
+                        setProgress3(progress);
+                        setProgressMsg(`(3/${totalSteps}) ${progress.message}`);
+                    });
                 } catch (error) {
                     console.error("Erreur File3:", error);
                     setProgressMsg('Erreur lors de l\'import du Fichier 3, rollback en cours...');
@@ -112,20 +163,48 @@ export default function ImportPage() {
                 }
             }
 
-            // Images : Fichier 4 (Nécessite les résultats du fichier 1)
-            if ( !oui && (imageFiles.length > 0) && file1Results) {
+            setResult3(file3Results)
+
+            if (!noImage && imageFiles.length > 0 && file1Results) {
                 try {
-                    setProgressMsg('(4/4) Extraction du ZIP des images...');
-                    
-                    // Extraire les fichiers du ZIP
+                    setActiveStep(4);
+                    setProgress4({
+                        step: 'zip',
+                        message: 'Extraction du ZIP des images...',
+                        description: 'Preparation des images...',
+                        percentage: 10
+                    });
+                    setProgressMsg(`(4/${totalSteps}) Extraction du ZIP des images...`);
+
                     const extractedImages = await extractZipFiles(imageFiles[0]);
-                    
+
                     if (extractedImages.length === 0) {
                         throw new Error('Le fichier ZIP ne contient aucune image');
                     }
-                    
-                    setProgressMsg(`(4/4) Importation des ${extractedImages.length} image(s)...`);
-                    await importFile4(extractedImages, file1Results, (progress) => setProgressMsg(`(4/4) ${progress.message}`));
+
+                    setProgress4({
+                        step: 'images',
+                        message: `Importation des ${extractedImages.length} image(s)...`,
+                        description: 'Upload des images...',
+                        percentage: 20
+                    });
+                    setProgressMsg(`(4/${totalSteps}) Importation des ${extractedImages.length} image(s)...`);
+                    file4Results = await importFile4(extractedImages, file1Results, (progress) => {
+                        const percentage = Math.round(progress.progress || 0);
+                        setProgress4({
+                            step: progress.step || 'images',
+                            message: progress.message || 'Import des images...',
+                            description: `Progression: ${percentage}%`,
+                            percentage
+                        });
+                        setProgressMsg(`(4/${totalSteps}) ${progress.message}`);
+                    });
+                    setProgress4({
+                        step: 'complete',
+                        message: 'Import des images termine !',
+                        description: 'Images importees.',
+                        percentage: 100
+                    });
                 } catch (error) {
                     console.error("Erreur File4:", error);
                     setProgressMsg('Erreur lors de l\'import des images, rollback en cours...');
@@ -134,6 +213,8 @@ export default function ImportPage() {
                 }
             }
 
+            setResult4(file4Results)
+
             setSuccessMessage("Fichiers importés avec succès !");
             setFile1(null);
             setFile2(null);
@@ -141,16 +222,23 @@ export default function ImportPage() {
             setImageFiles([]);
             document.querySelector('#file1Input').value = '';
             document.querySelector('#file2Input').value = '';
-            document.querySelector('#file3Input').value = '';
-            const imgInput = document.querySelector('#imageInput');
-            if (imgInput) imgInput.value = '';
+            const file3Input = document.querySelector('#file3Input');
+            if (file3Input) file3Input.value = '';
+            const imageInput = document.querySelector('#imageInput');
+            if (imageInput) imageInput.value = '';
 
         } catch (error) {
             console.error("Erreur d'import", error);
+            try {
+                await rollbackAllImports();
+            } catch (rollbackError) {
+                console.error('Erreur rollback:', rollbackError);
+            }
             setErrorMessage("Une erreur s'est produite lors de l'import : " + (error?.message || String(error)));
         } finally {
             setIsLoading(false);
             setProgressMsg('');
+            setActiveStep(null);
         }
     };
 
@@ -185,14 +273,6 @@ export default function ImportPage() {
                             )}
 
                             <form onSubmit={handleSubmit}>
-                                
-                                {/* Section CSV - 3 Fichiers Séparés */}
-                                <h5 className="mb-3 text-secondary d-flex align-items-center justify-content-center">
-                                    <MdFileUpload className="me-2" size={24} /> Fichiers de données (.csv)
-                                </h5>
-                                <p className="small text-muted text-center mb-4">
-                                    Sélectionnez les 3 fichiers CSV dans l'ordre. Chaque fichier a des dépendances sur le(s) précédent(s).
-                                </p>
 
                                 {/* Fichier 1 */}
                                 <div className="mb-3 p-3 border rounded bg-light">
@@ -217,7 +297,7 @@ export default function ImportPage() {
                                 {/* Fichier 2 */}
                                 <div className="mb-3 p-3 border rounded bg-light">
                                     <label className="form-label fw-bold text-dark mb-2 d-flex align-items-center">
-                                        <span className="badge bg-info me-2">2</span>
+                                        <span className="badge bg-primary me-2">2</span>
                                         Fichier 2 : Variantes & Stock
                                     </label>
                                     <input 
@@ -235,16 +315,16 @@ export default function ImportPage() {
                                 </div>
 
                                 {/* Fichier 3 */}
-                                <div className="mb-4 p-3 border rounded bg-light">
+                                <div className="mb-3 p-3 border rounded bg-light">
                                     <label className="form-label fw-bold text-dark mb-2 d-flex align-items-center">
                                         <span className="badge bg-warning me-2" style={{ color: '#fff' }}>3</span>
                                         Fichier 3 : Commandes & Clients
                                     </label>
-                                    <input 
+                                    <input
                                         id="file3Input"
-                                        type="file" 
-                                        className="form-control" 
-                                        accept=".csv" 
+                                        type="file"
+                                        className="form-control"
+                                        accept=".csv"
                                         onChange={handleFile3Change}
                                     />
                                     {file3 && (
@@ -254,36 +334,39 @@ export default function ImportPage() {
                                     )}
                                 </div>
 
-                                {/* Séparateur */}
-                                <hr className="my-5 opacity-25" />
-
-                                <div>
-                                    <label className='form-check-label mb-3' htmlFor="importImage"> Tsy importena ny image </label> 
-                                    <input className='form-check-input' checked={oui} onChange={handleImport} type="checkbox" name="importImage" id="importImage" />                                  
+                                <div className='form-check'>
+                                    <label className='form-check-label' htmlFor="noImage">No image </label>
+                                    <input className='form-check-input'
+                                        type="checkbox" 
+                                        checked={noImage}
+                                        name="noImage" 
+                                        id="noImage" 
+                                        onChange={handleNoImage}
+                                    />
                                 </div>
 
-                                {/* Section Images */}
-                                <h5 className="mb-3 text-secondary d-flex align-items-center justify-content-center">
-                                    <MdImage className="me-2" size={24} /> Images des produits (.zip)
-                                </h5>
-                                <div className="mb-5 p-4 border rounded bg-light shadow-sm text-center">
-                                    <p className="small text-secondary mb-3">
-                                        Importez un fichier ZIP contenant les images des produits. Le nom de chaque image doit correspondre à la référence du produit.
-                                    </p>
-                                    <input 
+                                <hr className="my-4 opacity-15" />
+
+                                { !noImage && (
+                                <div className="mb-3 p-3 border rounded bg-light">
+                                    <label className="form-label fw-bold text-dark mb-2 d-flex align-items-center">
+                                        <span className="badge bg-secondary me-2">4</span>
+                                        Images produits (.zip)
+                                    </label>
+                                    <input
                                         id="imageInput"
-                                        type="file" 
-                                        className="form-control" 
-                                        accept=".zip" 
+                                        type="file"
+                                        className="form-control"
+                                        accept=".zip"
                                         onChange={handleImageChange}
-                                        disabled={oui}
                                     />
                                     {imageFiles.length > 0 && (
-                                        <div className="mt-2 fw-bold small text-primary">
-                                            ✓ {imageFiles[0].name} sélectionné
+                                        <div className="mt-2 small text-success">
+                                            ✓ {imageFiles[0]?.name}
                                         </div>
                                     )}
                                 </div>
+                                )}
 
                                 {/* Bouton de Soumission */}
                                 <div className="text-center mt-2 d-flex justify-content-center">
@@ -304,11 +387,17 @@ export default function ImportPage() {
                         </div>
                     </div>
                     <div className="loading-progress-group loading-progress-group--horizontal">
-                        {(isLoading || progress1.percentage > 0) && (
-                            <LoadingProgress title="File 1 : Produits & Categories" progress={progress1} />
+                        {isLoading && activeStep === 1 && (
+                            <LoadingProgress title="File 1 : Produits & Taxes" progress={progress1} />
                         )}
-                        {(isLoading || progress2.percentage > 0) && (
+                        {isLoading && activeStep === 2 && (
                             <LoadingProgress title="File 2 : Variantes & Stock" progress={progress2} />
+                        )}
+                        {isLoading && activeStep === 3 && (
+                            <LoadingProgress title="File 3 : Commandes & Clients" progress={progress3} />
+                        )}
+                        {isLoading && activeStep === 4 && (
+                            <LoadingProgress title="File 4 : Images" progress={progress4} />
                         )}
                     </div>
                 </div>

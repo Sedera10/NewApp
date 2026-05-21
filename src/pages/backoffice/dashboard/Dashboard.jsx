@@ -96,6 +96,8 @@ export default function Dashboard() {
   useEffect(() => {
     const { start, end } = dateFilter;
 
+    console.log(`Debut : ${start} et Fin : ${end} `)
+
     if (!start || !end) {
       setPeriodStats(null);
       return;
